@@ -177,11 +177,37 @@ prompt. The review agent checks:
 
 Output format: findings with severity (P1/P2/P3), location, and concrete fix.
 
-If there are P1 or P2 findings, present them to the user before proceeding.
+If there are P1 or P2 findings, present them to the user, then proceed to Phase 4.5.
+If only P3 findings (or none), skip to Phase 5.
+
+## Phase 4.5: Fix and re-review (iterate until clean)
+
+When Phase 4 produces P1 or P2 findings:
+
+1. Dispatch an **implementation sub-agent** (model: sonnet) with the findings as its task.
+   The sub-agent receives:
+   - The full list of P1 and P2 findings with file locations and suggested fixes
+   - P3 findings as optional improvements (fix if trivial, skip if not)
+   - The same conventions and project context as Phase 2
+
+2. After fixes are applied, dispatch the **quality sub-agent** (model: sonnet) again
+   to verify fmt/clippy/tests still pass.
+
+3. Dispatch the **review sub-agent** (model: opus) again with fresh context. The reviewer
+   should:
+   - Verify the original P1/P2 findings are resolved
+   - Check that fixes didn't introduce new issues
+   - Review only the changed code, not the entire codebase again
+
+4. **Loop**: if the re-review produces new P1 or P2 findings, repeat from step 1.
+   Present each iteration's findings to the user.
+
+**Circuit breaker**: if 3 iterations haven't converged to a clean review, stop and
+present the remaining findings to the user. Something structural needs human judgment.
 
 ## Phase 5: Wrap up
 
-After all phases pass:
+After all phases pass (review is clean or user accepts remaining P3s):
 1. Summarize what was done (1-3 bullet points)
 2. List files changed
 3. Note any deferred decisions or follow-up work
