@@ -1,0 +1,86 @@
+# Repository Setup Conventions
+
+Standard repo configuration applied to all new projects.
+
+## GitHub branch protection (main)
+
+Configure via `gh api` after repo creation:
+
+1. **Require pull request before merging** — no direct pushes to main
+2. **Require linear history** — enforces rebase or squash (no merge commits cluttering history)
+3. **All merge types allowed** — merge, squash, and rebase all permitted (let the author choose)
+4. **No force-push to main** — ever
+
+```bash
+gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'EOF'
+{
+  "name": "main-protection",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {"type": "pull_request", "parameters": {"required_approving_review_count": 0, "dismiss_stale_reviews_on_push": false, "require_last_push_approval": false}},
+    {"type": "required_linear_history"},
+    {"type": "non_fast_forward"}
+  ]
+}
+EOF
+```
+
+Note: `required_approving_review_count: 0` means a PR is required but no human approval
+is needed — the AI can self-merge after CI passes. Adjust per repo if human review is wanted.
+
+## Git workflow
+
+- **Feature branches required** — all work on `feature/<description>` or `fix/<description>`
+- **Never commit directly to main**
+- **Linear history** — rebase onto main before merging, or squash merge
+
+## Pre-push quality gates
+
+Enforced via git hooks (`.git/hooks/pre-push`) or CI:
+
+### Rust
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+cargo fmt -- --check || { echo "Run cargo fmt first"; exit 1; }
+cargo clippy -- -D warnings || { echo "Fix clippy warnings"; exit 1; }
+cargo nextest run --workspace || { echo "Tests failing"; exit 1; }
+```
+
+### General
+- Format check (language-specific formatter)
+- Lint check (zero warnings)
+- Test suite passes
+- Build succeeds
+
+These gates run automatically before any push to remote. Code that doesn't pass
+format + lint + tests does not leave the local machine.
+
+## CI (GitHub Actions)
+
+Minimal CI that mirrors the local pre-push hooks:
+
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Format
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+      - name: Test
+        run: cargo nextest run --workspace
+```
+
+CI is the safety net — if local hooks were bypassed, CI catches it.
