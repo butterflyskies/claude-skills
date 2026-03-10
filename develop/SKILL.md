@@ -205,13 +205,36 @@ When Phase 4 produces P1 or P2 findings:
 **Circuit breaker**: if 3 iterations haven't converged to a clean review, stop and
 present the remaining findings to the user. Something structural needs human judgment.
 
-## Phase 5: Wrap up
+## Phase 5: Land
 
 After all phases pass (review is clean or user accepts remaining P3s):
+
+### 5a. Summary
 1. Summarize what was done (1-3 bullet points)
 2. List files changed
 3. Note any deferred decisions or follow-up work
-4. Do NOT commit or push — the user decides when to land
+
+### 5b. Commit and push
+1. Stage all relevant files (not secrets). For `.serena/`: commit everything that
+   `.serena/.gitignore` doesn't exclude — this includes `project.yml` (project config),
+   `.gitignore`, and `memories/` (project-scoped knowledge shared across sessions).
+   Serena's own `.gitignore` already excludes `cache/` and `project.local.yml`.
+2. Commit with a descriptive message following repo conventions
+3. Push to the feature branch
+4. Use `GIT_CONFIG_GLOBAL=~/.gitconfig.ai` and `GH_CONFIG_DIR=~/.config/gh-butterflysky-ai`
+   for all git/gh operations
+
+### 5c. Create PR
+1. Create a pull request via `gh pr create`
+2. Title: concise description of the change
+3. Body: summary from 5a, list of ADRs written, link to any tracking issue
+4. If a tracking issue exists, link it in the PR body
+
+### 5d. Tracking
+1. Check if a tracking issue exists in `butterflyskies/tasks` for this work
+2. If not, create one: `gh issue create --repo butterflyskies/tasks --title "<work description>"`
+3. Comment on the tracking issue with the PR link and a brief status update
+4. Assign the issue to the current milestone if one exists
 
 ## Language detection
 
