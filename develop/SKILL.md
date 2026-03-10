@@ -219,9 +219,12 @@ After all phases pass (review is clean or user accepts remaining P3s):
    `.serena/.gitignore` doesn't exclude — this includes `project.yml` (project config),
    `.gitignore`, and `memories/` (project-scoped knowledge shared across sessions).
    Serena's own `.gitignore` already excludes `cache/` and `project.local.yml`.
-2. Commit with a descriptive message following repo conventions
-3. Push to the feature branch
-4. Use `GIT_CONFIG_GLOBAL=~/.gitconfig.ai` and `GH_CONFIG_DIR=~/.config/gh-butterflysky-ai`
+2. **Rust projects**: run `cargo doc --no-deps` before committing. This verifies that
+   documentation builds cleanly — doc warnings or errors must be fixed before proceeding.
+   The generated output in `target/doc/` is not committed (it's gitignored).
+3. Commit with a descriptive message following repo conventions
+4. Push to the feature branch
+5. Use `GIT_CONFIG_GLOBAL=~/.gitconfig.ai` and `GH_CONFIG_DIR=~/.config/gh-butterflysky-ai`
    for all git/gh operations
 
 ### 5c. Create PR
@@ -230,7 +233,15 @@ After all phases pass (review is clean or user accepts remaining P3s):
 3. Body: summary from 5a, list of ADRs written, link to any tracking issue
 4. If a tracking issue exists, link it in the PR body
 
-### 5d. Tracking
+### 5d. Branch protection
+On the first PR for a new repo, check if main has branch protection rulesets:
+```bash
+gh api repos/{owner}/{repo}/rulesets --jq 'length'
+```
+If `0` (no rulesets), create them per [references/repo-setup.md](references/repo-setup.md).
+This is a one-time setup — skip on subsequent PRs.
+
+### 5e. Tracking
 1. Check if a tracking issue exists in `butterflyskies/tasks` for this work
 2. If not, create one: `gh issue create --repo butterflyskies/tasks --title "<work description>"`
 3. Comment on the tracking issue with the PR link and a brief status update
