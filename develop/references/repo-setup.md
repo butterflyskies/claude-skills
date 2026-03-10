@@ -84,3 +84,44 @@ jobs:
 ```
 
 CI is the safety net — if local hooks were bypassed, CI catches it.
+
+## Docs (GitHub Pages via Actions) — Rust
+
+For Rust projects, publish `cargo doc` output to GitHub Pages on every push to main:
+
+```yaml
+name: Docs
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build docs
+        run: cargo doc --no-deps --document-private-items
+      - name: Add redirect
+        run: echo '<meta http-equiv="refresh" content="0;url=<crate_name>/index.html">' > target/doc/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc
+      - id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+Replace `<crate_name>` with the actual crate name (hyphens become underscores).
+Enable GitHub Pages in repo settings → Pages → Source: GitHub Actions.
+
+The `cargo doc --no-deps` step in Phase 5b of the develop skill verifies docs build
+cleanly before committing — the CI job here handles publishing to Pages.
