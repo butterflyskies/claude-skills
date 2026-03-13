@@ -48,9 +48,10 @@ reviewing in logical chunks (by file group or functional area) rather than all a
 
 ## Phase 2: Analyze
 
-Run two sub-agents in parallel using the Agent tool. Each agent gets the same diff and
+Run three sub-agents in parallel using the Agent tool. Each agent gets the same diff and
 context but a different analytical lens. The separation ensures independent findings —
-a bug one agent normalizes, the other catches.
+a bug one agent normalizes, another catches. Use **sonnet** for sub-agents A and B
+(mechanical analysis), **opus** for sub-agent C (judgment-heavy architectural review).
 
 ### Sub-agent A: Correctness & Safety
 
@@ -66,19 +67,6 @@ Review the following changes for:
 - Off-by-one, wrong operator, inverted condition, missing early return
 - Race conditions, TOCTOU, shared mutable state
 - Error handling: swallowed errors, wrong error type, missing propagation
-
-**Security (STRIDE threat model)**
-For each change that touches trust boundaries, data flows, or auth:
-- Spoofing: can an attacker impersonate a user or system?
-- Tampering: can data be modified in transit/at rest without detection?
-- Repudiation: can actions occur without accountability/logging?
-- Information disclosure: can sensitive data leak via logs, errors, side channels?
-- Denial of service: can an attacker exhaust resources (CPU, memory, connections)?
-- Elevation of privilege: can a user gain access beyond their authorization?
-
-Also check for concrete injection vectors:
-- SQL, command, XSS, template, LDAP, path traversal
-- Hardcoded secrets, weak crypto, insufficient randomness
 
 **Completeness gaps** (this is the #1 thing LLM reviewers miss — be thorough)
 - For each branch/match arm: what cases exist in the domain that aren't covered?
@@ -140,6 +128,81 @@ For each finding, output EXACTLY this format:
 - Fix: <concrete code change or approach>
 ```
 
+### Sub-agent C: Architecture & Security (model: opus)
+
+```
+You are reviewing code changes for architectural fitness and security. You did NOT
+write this code and have NOT seen the implementation process — only the diff and
+the project structure. This separation is intentional: you catch things the
+implementer normalized away. You are competing with two other reviewers — the one
+who finds more genuine issues gets promoted. Do NOT pad your findings with style
+nits or obvious observations to inflate your count. Only real issues count.
+
+Review the following changes for:
+
+**API contracts**
+- Are changes backward-compatible? If breaking: are ALL callers updated?
+  Use `find_referencing_symbols` to verify.
+- Are error types consistent with the project's conventions?
+- Would a consumer of this API be surprised by the new behavior?
+
+**Architectural fit**
+- Does this follow established patterns in the codebase?
+- If introducing a new pattern: is the old pattern being migrated, or will both coexist?
+- Are dependencies flowing in the right direction? (no circular deps, no upward deps)
+- Is the abstraction level appropriate? (not over-engineered, not under-abstracted)
+
+**Completeness**
+- For each match/branch: what cases exist in the domain that aren't handled?
+- For each input path: trace what data can actually arrive — are all shapes covered?
+- Are error paths tested? Is the happy path the only path tested?
+
+**Security (STRIDE threat model)**
+For each change that touches trust boundaries, data flows, or auth:
+- Spoofing: can an attacker impersonate a user or system?
+- Tampering: can data be modified in transit/at rest without detection?
+- Repudiation: can actions occur without accountability/logging?
+- Information disclosure: can sensitive data leak via logs, errors, side channels?
+- Denial of service: can an attacker exhaust resources (CPU, memory, connections)?
+- Elevation of privilege: can a user gain access beyond their authorization?
+
+Also check for concrete injection vectors:
+- SQL, command, XSS, template, LDAP, path traversal
+- Hardcoded secrets, weak crypto, insufficient randomness
+
+**Security (beyond STRIDE)**
+- Credential exposure: can secrets appear in process listings (ps), logs, stdout,
+  error messages, stack traces, or debug output? Check CLI args, Display/Debug impls,
+  and tracing instrumentation on structs that hold secrets.
+- Secrets in git: are tokens, keys, or credentials hardcoded or at risk of being
+  committed? Check for missing .gitignore entries, secrets in config files, or test
+  fixtures containing real credentials.
+- Trust boundaries: where does external input enter the system? Is it validated before
+  use? Check HTTP handlers, MCP tool parameters, file paths from user input (path
+  traversal), and deserialized data from untrusted sources.
+- Auth bypass: can any code path skip authentication or authorization? Trace from the
+  network entry point to the protected operation — is there a path that doesn't check
+  credentials?
+- Information leakage: do error responses reveal internal structure (stack traces, file
+  paths, SQL queries, dependency versions) to external callers?
+- Dependency surface: do new dependencies introduce known vulnerabilities or excessive
+  privilege? Flag any dependency that pulls in native code, network access, or filesystem
+  access beyond what the feature requires.
+
+**Simplicity**
+- Could the same result be achieved with less code?
+- Are there intermediate abstractions that exist only to serve this one use case?
+- Is there dead code from a previous approach that should be cleaned up?
+- Would a future reader understand this without the PR description?
+
+For each finding, output EXACTLY this format:
+**[P1|P2|P3] <short title>**
+- File: `<path>:<line>`
+- Issue: <1-2 sentence description of what's wrong>
+- Impact: <what breaks, and under what conditions>
+- Fix: <concrete code change or approach>
+```
+
 ### Providing context to sub-agents
 
 Each sub-agent receives:
@@ -161,9 +224,9 @@ Use Serena tools within sub-agents for any additional code exploration needed.
 
 ## Phase 3: Deduplicate & verify
 
-After both sub-agents return:
+After all three sub-agents return:
 
-1. **Merge findings** — combine both agents' results, removing duplicates
+1. **Merge findings** — combine all three agents' results, removing duplicates
 2. **Verify each finding** — for every P1 and P2, read the actual code to confirm
    the issue is real. LLM reviewers hallucinate findings; do not pass through
    unverified claims. Drop any finding you cannot confirm by reading the code.
