@@ -161,21 +161,19 @@ Output: pass/fail with details on any issues found and fixed.
 
 If the quality agent reports unfixed issues, present them to the user with options.
 
-## Phase 4: Architectural review
+## Phase 4: Code review
 
-Dispatch a **review sub-agent** (model: opus) that examines the changes
-from an architectural perspective. This agent has NOT seen the implementation process —
-only the diff and the project structure.
+Invoke the `/code-review` skill with `branch` scope. This runs three parallel sub-agents
+(correctness, design, architecture+security) and produces deduplicated, verified findings.
+The `/code-review` skill is the single source of truth for review methodology — do not
+duplicate its logic here.
 
-See [references/review-dimensions.md](references/review-dimensions.md) for the review
-prompt. The review agent checks:
+```
+/code-review branch
+```
 
-1. **API contracts** — are changes backward-compatible? If not, are all callers updated?
-2. **Architectural fit** — does this follow established project patterns?
-3. **Completeness** — are there cases the implementation doesn't handle?
-4. **Simplicity** — could the same result be achieved with less code?
-
-Output format: findings with severity (P1/P2/P3), location, and concrete fix.
+The code-review skill will post findings to the PR if one exists, or display in-session.
+Collect the findings from the review output.
 
 If there are P1 or P2 findings, present them to the user, then proceed to Phase 4.5.
 If only P3 findings (or none), skip to Phase 5.
@@ -193,11 +191,8 @@ When Phase 4 produces P1 or P2 findings:
 2. After fixes are applied, dispatch the **quality sub-agent** (model: sonnet) again
    to verify fmt/clippy/tests still pass.
 
-3. Dispatch the **review sub-agent** (model: opus) again with fresh context. The reviewer
-   should:
-   - Verify the original P1/P2 findings are resolved
-   - Check that fixes didn't introduce new issues
-   - Review only the changed code, not the entire codebase again
+3. Run `/code-review branch` again. The review skill will independently verify the
+   original findings are resolved and check for new issues introduced by the fixes.
 
 4. **Loop**: if the re-review produces new P1 or P2 findings, repeat from step 1.
    Present each iteration's findings to the user.
