@@ -83,7 +83,8 @@ is `Friday Focus — Mon DD` (e.g., "Friday Focus — Feb 13").
 2. For any milestone whose `due_on` is in the past:
    a. If a newer milestone doesn't already exist, create one for the next Friday:
       - Title: `Friday Focus — <Mon DD>` (e.g., "Friday Focus — Feb 20")
-      - Due date: that Friday at `T00:00:00Z`
+      - Due date: the Saturday after that Friday at `T00:00:00Z` (so all of Friday is
+        available before the milestone is considered past due)
       - Description: "Weekly milestone — open items carry forward automatically at session end."
    b. Move all open issues from the past-due milestone to the current/new milestone
    c. After carry-forward, check the old milestone's issue counts:
