@@ -48,10 +48,13 @@ reviewing in logical chunks (by file group or functional area) rather than all a
 
 ## Phase 2: Analyze
 
-Run three sub-agents in parallel using the Agent tool. Each agent gets the same diff and
-context but a different analytical lens. The separation ensures independent findings —
-a bug one agent normalizes, another catches. Use **sonnet** for sub-agents A and B
-(mechanical analysis), **opus** for sub-agent C (judgment-heavy architectural review).
+Launch all three sub-agents in a **single message** with three parallel Agent tool calls,
+each with `run_in_background: true`. This ensures true concurrent execution — launching
+them sequentially wastes time and defeats the purpose of independent analysis. Each agent
+gets the same diff and context but a different analytical lens. The separation ensures
+independent findings — a bug one agent normalizes, another catches. Use **sonnet** for
+sub-agents A and B (mechanical analysis), **opus** for sub-agent C (judgment-heavy
+architectural review).
 
 ### Sub-agent A: Correctness & Safety
 
