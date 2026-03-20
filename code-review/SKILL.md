@@ -214,8 +214,22 @@ Each sub-agent receives:
 3. Symbol overview of affected files
 4. Caller information for changed function signatures
 5. Contents of `global/code-review-patterns` memory (learned patterns)
+6. **Previously dismissed findings** (for multi-round reviews only — see Phase 3)
 
 Use Serena tools within sub-agents for any additional code exploration needed.
+
+When running a subsequent round on the same scope, include a "Previously dismissed"
+section in each sub-agent prompt. This prevents agents from re-discovering the same
+false positives and wasting verification cycles. Use this format:
+
+```
+Previously evaluated and dismissed (do not re-flag unless you have NEW evidence
+that changes the analysis):
+- "<finding title>" — <reason for dismissal>
+```
+
+Only include findings that were **verified as false positives** in a prior Phase 3 —
+not findings that were real and fixed (those belong in the "previously fixed" context).
 
 ### Severity definitions
 
@@ -245,6 +259,11 @@ After all three sub-agents return:
      pattern *looks* like a bug but appears intentional, still flag it as a P3
      asking the author to add a comment explaining why. Code that requires
      reviewer investigation to distinguish from a bug needs a comment.
+4. **Track dismissed findings** — for each finding dropped as a false positive,
+   record the finding title and a one-line reason for dismissal. This list is
+   carried forward into sub-agent prompts in subsequent rounds (see Phase 2,
+   "Providing context to sub-agents") so agents do not re-flag the same non-issues.
+   Include dismissed findings in the report's Summary section for transparency.
 
 ## Phase 4: Report
 
