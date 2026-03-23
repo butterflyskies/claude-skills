@@ -46,8 +46,10 @@ Dispatch a **planning sub-agent** (model: opus) to:
    `find_symbol` with `include_body=true` only for symbols that need modification
 3. Identify all files and symbols that need to change
 4. For each changed function/method signature, use `find_referencing_symbols` to find callers
-5. Propose an approach: what changes, in what order, and why
-6. Flag risks, ambiguities, or decisions that need user input
+5. For stateful subsystems: identify resource lifecycle (creation → cleanup → limits).
+   External connections/sessions require a timeout and max-count strategy in the plan.
+6. Propose an approach: what changes, in what order, and why
+7. Flag risks, ambiguities, or decisions that need user input
 
 **Sub-agent prompt template:**
 ```
