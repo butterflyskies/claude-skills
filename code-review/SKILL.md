@@ -80,6 +80,9 @@ Review the following changes for:
 - For each pattern match on input: trace all callers — what inputs reach this code
   that DON'T match any handled pattern?
 - "Inputs always look like X" is a red flag — verify by tracing actual data flow
+- For each resource created (sessions, connections, handles, caches, temp files):
+  what cleans it up? Timeout, eviction, explicit close, Drop impl? If nothing
+  cleans it up, that's a finding.
 
 **Data integrity**
 - Mutations that could corrupt or lose data (wrong UPDATE scope, missing WHERE clause)
@@ -169,6 +172,9 @@ For each change that touches trust boundaries, data flows, or auth:
 - Repudiation: can actions occur without accountability/logging?
 - Information disclosure: can sensitive data leak via logs, errors, side channels?
 - Denial of service: can an attacker exhaust resources (CPU, memory, connections)?
+  Specifically: stateful services that accept external connections — is there a
+  session/connection limit and idle timeout? Unbounded accumulation from external
+  triggers is a resource exhaustion vector.
 - Elevation of privilege: can a user gain access beyond their authorization?
 
 Also check for concrete injection vectors:

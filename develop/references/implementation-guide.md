@@ -70,6 +70,13 @@ review cycles — each one caused P1 or P2 findings that required fix-and-re-rev
    variant. A `NoRemote` / `NotFound` / `Skipped` result that falls through to "proceed
    as normal" is a logic gap.
 
+8. **Resource lifecycle** — Every created resource (session, connection, handle, temp
+   file, cache entry) must have a corresponding cleanup path. If the resource is
+   externally triggered (e.g., client connections creating sessions), require a timeout
+   and/or cap.
+   *Check:* for each long-lived resource created, trace what removes it. If nothing does,
+   that's a memory leak. If it's externally triggered with no bound, that's a DoS vector.
+
 ## Sub-agent prompt template
 
 ```
