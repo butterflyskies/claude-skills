@@ -25,6 +25,27 @@ this review will seed it.
 | `file <path>`        | Single file, full review                      |
 | `files <glob>`       | Multiple files matching pattern               |
 | `commit <ref>`       | Single commit diff                            |
+| `--since <ref>`      | Incremental: only commits since `<ref>`       |
+
+### Incremental review mode (`--since`)
+
+When `--since <commit-sha>` is appended to any scope argument (e.g., `branch --since abc123`),
+the review operates in **incremental mode** for fix-round efficiency:
+
+1. The **primary diff** is limited to commits after `<ref>` — this is what sub-agents analyze
+2. Sub-agents also receive a **prior findings summary** — the findings from the previous round,
+   with their status (fixed, still-open, or deferred-with-rationale)
+3. Sub-agents are instructed to:
+   - Verify each prior finding is addressed (fixed in the new commits or explicitly deferred)
+   - Flag **new issues** introduced by the fix commits
+   - Only cross-reference unchanged code when the new changes directly affect it
+   - Not re-review code that hasn't changed since the last review
+4. The coordinator merges the incremental findings with the prior findings to produce a
+   cumulative status report
+
+This mode cuts review time on rounds 2+ significantly by preventing re-analysis of
+already-reviewed, unchanged code. The `/develop` skill's Phase 4.5 should use this mode
+automatically when re-invoking `/code-review` after fixes.
 
 ## Phase 1: Gather context
 
@@ -61,10 +82,11 @@ architectural review).
 ### Sub-agent A: Correctness & Safety
 
 ```
-You are reviewing code changes for correctness and safety issues. You are competing
-with another reviewer — the one who finds more genuine issues gets promoted. Do NOT
-pad your findings with style nits or obvious observations to inflate your count.
-Only real issues count.
+You are reviewing code changes for correctness and safety issues. Precision matters
+more than count. Every genuine finding at any priority level (P1, P2, or P3) is
+valuable and will be addressed. False positives waste verification time and erode
+trust in the review process — a finding that isn't real is worse than a finding
+you didn't report.
 
 Review the following changes for:
 
@@ -101,10 +123,11 @@ For each finding, output EXACTLY this format:
 ### Sub-agent B: Design & Maintainability
 
 ```
-You are reviewing code changes for design and maintainability issues. You are competing
-with another reviewer — the one who finds more genuine issues gets promoted. Do NOT
-pad your findings with style nits or obvious observations to inflate your count.
-Only real issues count.
+You are reviewing code changes for design and maintainability issues. Precision matters
+more than count. Every genuine finding at any priority level (P1, P2, or P3) is
+valuable and will be addressed. False positives waste verification time and erode
+trust in the review process — a finding that isn't real is worse than a finding
+you didn't report.
 
 Review the following changes for:
 
@@ -125,6 +148,16 @@ Review the following changes for:
 - Edge cases in new code that tests don't cover
 - Test assertions that don't actually verify the behavior they claim to test
 
+**Test quality**
+- Do tests exercise the library's public API, or do they duplicate internal logic?
+  Tests that reimplement the production code path instead of calling it prove nothing
+  about the real code.
+- Are assertions non-vacuous? A test should fail if its assertion is removed. Tests
+  that compare single-element collections, assert `true`, or check trivially-true
+  conditions waste CI time and give false confidence.
+- For edge-case tests: is the edge case actually exercised? Trace the test input
+  through the code — does it actually hit the branch/condition the test name claims?
+
 **Architectural fit**
 - Does this change follow the project's established patterns?
 - Are abstractions at the right level? (over-engineering is as bad as under-)
@@ -144,9 +177,10 @@ For each finding, output EXACTLY this format:
 You are reviewing code changes for architectural fitness and security. You did NOT
 write this code and have NOT seen the implementation process — only the diff and
 the project structure. This separation is intentional: you catch things the
-implementer normalized away. You are competing with two other reviewers — the one
-who finds more genuine issues gets promoted. Do NOT pad your findings with style
-nits or obvious observations to inflate your count. Only real issues count.
+implementer normalized away. Precision matters more than count. Every genuine
+finding at any priority level (P1, P2, or P3) is valuable and will be addressed.
+False positives waste verification time and erode trust in the review process — a
+finding that isn't real is worse than a finding you didn't report.
 
 Review the following changes for:
 

@@ -38,8 +38,13 @@ Use memory-mcp tools (`edit` / `remember`) for all updates. Run `sync` after.
 For each repo that was touched this session:
 1. `git status` — check for uncommitted changes
 2. `git diff` — review what's staged and unstaged
-3. Commit with a clear message (follow repo conventions)
-4. Push to remote
+3. **Run quality checks before committing** — for Rust projects:
+   `cargo fmt -- --check && cargo clippy -- -D warnings && cargo nextest run --workspace`
+   If any check fails, fix the issue before committing. Do not push code that hasn't
+   passed the same gates CI will check. For other languages, run the equivalent
+   formatter, linter, and test suite.
+4. Commit with a clear message (follow repo conventions)
+5. Push to remote
 
 Skip repos with clean working trees.
 
