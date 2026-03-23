@@ -8,11 +8,11 @@ disable-model-invocation: false
 
 Run this when wrapping up a work session. Work through each phase in order.
 
-Read the `required_environment_variables` Serena memory if you haven't already this session,
-and use those identities for all git/gh operations throughout.
+Use memory-mcp's `recall` or `read` tool to load the `required-environment-variables` memory
+if you haven't already this session, and use those identities for all git/gh operations.
 
-Reference the `infrastructure_overview` memory for GitHub org conventions, project tracker
-locations, and issue routing rules.
+Use `recall` to find the `infrastructure-overview` memory for GitHub org conventions, project
+tracker locations, and issue routing rules.
 
 ## Idempotency
 
@@ -26,12 +26,12 @@ should check whether there's actually something new to do before acting:
 
 ## Phase 1: Capture learnings
 
-Review what happened this session and update relevant Serena memories:
+Review what happened this session and update relevant memories via memory-mcp:
 - New project knowledge, architecture changes, resolved design questions
 - Workflow preferences or patterns that emerged
 - Corrections to stale information (test counts, binary sizes, branch status, etc.)
 
-Use Serena's memory tools (`edit_memory` / `write_memory`) for all updates.
+Use memory-mcp tools (`edit` / `remember`) for all updates. Run `sync` after.
 
 ## Phase 2: Git housekeeping
 
@@ -110,8 +110,9 @@ figured out. Not a dry changelog; a record of progress that's satisfying to read
 
 ## Phase 8: Session handoff
 
-Write a **project-scoped** handoff memory (e.g. `session_handoff` in the active project)
-only when there is genuinely complex in-flight context that would take time to re-derive.
+Write a **project-scoped** handoff memory (e.g. `session-handoff` with `scope: "project:<name>"`)
+via memory-mcp's `remember` tool, only when there is genuinely complex in-flight context that
+would take time to re-derive.
 
 When writing one:
 - What was being worked on and where it left off

@@ -7,8 +7,8 @@ description: "Edit and publish skill changes. Takes a description of what to cha
 
 Modify skills based on a description, then handle the git workflow to land the changes.
 
-Read the `required_environment_variables` Serena global memory if you haven't already this
-session, and use those identities for all git/gh operations throughout.
+Use memory-mcp's `read` tool to load the `required-environment-variables` memory (scope: global)
+if you haven't already this session, and use those identities for all git/gh operations throughout.
 
 ## Argument handling
 

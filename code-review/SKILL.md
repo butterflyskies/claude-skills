@@ -8,9 +8,10 @@ description: "Systematic code review with sub-agent analysis. Works on PRs, bran
 Perform a structured, multi-phase code review. This skill produces actionable findings
 with severity, location, and concrete fixes — not style nits or praise.
 
-Read the `global/code-review-patterns` Serena memory before starting. It contains
-learned patterns from previous reviews that should inform what you look for. If the
-memory doesn't exist yet, proceed without it — findings from this review will seed it.
+Use memory-mcp's `read` tool to load the `code-review-patterns` memory (scope: global)
+before starting. It contains learned patterns from previous reviews that should inform
+what you look for. If the memory doesn't exist yet, proceed without it — findings from
+this review will seed it.
 
 ## Argument handling
 
@@ -30,8 +31,9 @@ memory doesn't exist yet, proceed without it — findings from this review will 
 Before reviewing code, build understanding. This phase is **silent** — no output to user.
 
 1. **Identify the diff** — resolve `$ARGUMENTS` to a concrete set of changed files and hunks
-2. **Read project conventions** — check for `.claude/CLAUDE.md`, Serena project memories
-   (`style_and_conventions`, `project_overview`), and any linter/formatter configs
+2. **Read project conventions** — check for `.claude/CLAUDE.md`, memory-mcp project memories
+   (use `list` filtered by project scope, look for `project-overview`, conventions), and
+   any linter/formatter configs
 3. **Understand architecture** — for non-trivial changes, use Serena's `get_symbols_overview`
    on affected files to understand the surrounding code structure. Read symbol bodies only
    when needed to understand how changed code fits into the system.
@@ -213,7 +215,7 @@ Each sub-agent receives:
 2. Project conventions (from Phase 1)
 3. Symbol overview of affected files
 4. Caller information for changed function signatures
-5. Contents of `global/code-review-patterns` memory (learned patterns)
+5. Contents of `code-review-patterns` memory from memory-mcp (learned patterns)
 6. **Previously dismissed findings** (for multi-round reviews only — see Phase 3)
 
 Use Serena tools within sub-agents for any additional code exploration needed.
@@ -341,7 +343,7 @@ Always tell the user where the review was posted (PR URL, issue URL, or "display
 ## Phase 6: Learn (optional)
 
 If the review produced P1 or P2 findings that reveal a **pattern** (not just a one-off bug),
-update the `global/code-review-patterns` Serena memory:
+update the `code-review-patterns` memory in memory-mcp (scope: global):
 
 - New pattern: what to look for, why it matters, example from this review
 - Refinement: if an existing pattern helped catch something, note the confirmation
@@ -354,8 +356,8 @@ speculative patterns from unconfirmed findings.
 
 ## Configuration
 
-The skill respects project-level overrides. If a project's Serena memories contain a
-`code_review_config` memory, read it and apply:
+The skill respects project-level overrides. If a project's memory-mcp memories contain a
+`code-review-config` memory (check with `list` filtered by project scope), read it and apply:
 
 - **skip_categories**: list of categories to suppress (e.g., `["dead_code"]`)
 - **extra_patterns**: additional domain-specific patterns to check

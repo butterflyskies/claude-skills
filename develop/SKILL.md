@@ -8,9 +8,9 @@ description: "End-to-end development workflow with sub-agent specialization. Use
 Implement changes using specialized sub-agents, each with a dedicated context window.
 The coordinator (you) stays lean — orchestrate, don't accumulate.
 
-Read `global/required_environment_variables` and `global/rust_code_standards` Serena memories
-if not already loaded this session. Check for project-scoped `style_and_conventions` and
-`project_overview` memories — pass their contents to sub-agents as context.
+Use memory-mcp to load `required-environment-variables` and `rust-code-standards` memories
+(scope: global) if not already loaded this session. Check for project-scoped memories (use
+`list` filtered by project scope) — pass their contents to sub-agents as context.
 
 ## Argument handling
 
@@ -57,7 +57,7 @@ implementation approach. Do NOT write code — produce a plan.
 Task: <task description>
 Project language: <language>
 Build command: <from CLAUDE.md or Cargo.toml etc.>
-Project conventions: <from Serena memories if available>
+Project conventions: <from memory-mcp project memories if available>
 
 Use Serena's symbolic tools to explore the codebase efficiently:
 - get_symbols_overview for file structure
