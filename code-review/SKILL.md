@@ -114,6 +114,8 @@ Review the following changes for:
 - Code that the change made unreachable or unnecessary
 - Duplicated logic that should be consolidated
 - Imports, variables, enum variants, or parameters that are no longer used
+- For `Option`-guarded features: does disabling the feature leave allocated-but-unused
+  fields? If so, group the feature's state into a sub-struct and wrap in `Option`.
 
 **Testing gaps**
 - Changed behavior that has no corresponding test update
