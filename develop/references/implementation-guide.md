@@ -80,7 +80,7 @@ Plan:
 
 Language: <detected language>
 Conventions: <from references/<language>.md>
-Project conventions: <from Serena memories if available>
+Project conventions: <from memory-mcp project memories if available>
 
 Files to modify: <list from plan>
 

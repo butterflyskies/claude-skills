@@ -5,11 +5,11 @@ description: "When requested: execute periodic follow-up checks and update track
 
 # /check-in — Execute Periodic Follow-ups
 
-Run the actual checks for items in the `periodic_followups` global memory, report findings,
-and update `Last checked` dates.
+Run the actual checks for items in the `periodic-followups` memory (scope: global), report
+findings, and update `Last checked` dates.
 
-Read the `required_environment_variables` Serena global memory if you haven't already this
-session, and use those identities for all gh operations throughout.
+Use memory-mcp's `read` tool to load the `required-environment-variables` memory (scope: global)
+if you haven't already this session, and use those identities for all gh operations throughout.
 
 ## Argument handling
 
@@ -24,7 +24,7 @@ session, and use those identities for all gh operations throughout.
 
 ## Phase 1: Identify items to check
 
-1. Read the `periodic_followups` global Serena memory
+1. Use memory-mcp's `read` tool to load the `periodic-followups` memory (scope: global)
 2. Parse each active item's `Last checked` date and `Frequency`
 3. Calculate due dates:
    - weekly = last checked + 7 days
@@ -50,17 +50,8 @@ Collect command output and interpret results:
 For each checked item:
 
 1. **Report findings** — summarize what changed (or didn't) since last check
-2. **Update `Last checked`** — use `edit_memory` on the `periodic_followups` global memory
-   to set today's date:
-   ```
-   edit_memory(
-     memory_file_name="periodic_followups",
-     scope="global",
-     mode="regex",
-     needle=r"(### <N>\. <Title>.*?Last checked:\s*)\d{4}-\d{2}-\d{2}",
-     repl=r"\g<1>YYYY-MM-DD"   # today's date
-   )
-   ```
+2. **Update `Last checked`** — use memory-mcp's `edit` tool on the `periodic-followups`
+   memory (scope: global) to update the date for the checked item.
 3. **If "Done when" is met** — ask the user before moving the item to the Completed Items
    section. Don't move automatically.
 

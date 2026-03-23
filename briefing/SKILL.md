@@ -8,8 +8,8 @@ description: "When requested: session-start situational awareness — notificati
 Scan what's happened since last session and present a concise summary. This skill is
 **read-only** — it never modifies anything (except syncing notification state via gh-notify).
 
-Read the `global/required_environment_variables` Serena global memory if you haven't already this
-session, and use those identities for all gh operations throughout.
+Use memory-mcp's `read` tool to load the `required-environment-variables` memory (scope: global)
+if you haven't already this session, and use those identities for all gh operations throughout.
 
 ## Argument handling
 
@@ -79,7 +79,8 @@ gh api 'repos/butterflyskies/tasks/milestones?state=open'
 
 ## Phase 4: Follow-ups due
 
-Read the `global/periodic_followups` Serena global memory. For each active item:
+Use memory-mcp's `recall` tool to search for periodic follow-ups. If a `periodic-followups`
+memory exists (scope: global), read it. For each active item:
 
 1. Parse `Last checked` date and `Frequency`
 2. Calculate next due date:

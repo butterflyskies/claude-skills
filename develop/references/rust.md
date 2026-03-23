@@ -1,7 +1,7 @@
 # Rust Development Standards
 
-Standards passed to sub-agents working on Rust projects. Source: `global/rust_code_standards`
-Serena memory + user workflow preferences.
+Standards passed to sub-agents working on Rust projects. Source: `rust-code-standards`
+memory-mcp memory (scope: global) + user workflow preferences.
 
 ## Anti-patterns to avoid
 
