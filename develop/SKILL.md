@@ -37,6 +37,22 @@ You are the orchestrator. Your job:
 You do NOT: read implementation files into your own context, write code directly,
 or run tests yourself. Sub-agents do the focused work.
 
+## Phase 0: Frame the work
+
+Before planning begins, establish the "so what?" — why does this work matter?
+
+- **Who benefits** from this change?
+- **What's the counterfactual** — what happens if we don't do it?
+- **What does success look like** and how would we know?
+
+For small, well-scoped tasks (bug fix with a clear issue, config change), this can be a
+one-sentence acknowledgment. For larger work — new features, architectural changes, greenfield
+components — this is a deliberate pause to align on intent before investing in a plan.
+
+State the framing to the user. If the "so what?" isn't clear from the task description, ask.
+This framing anchors everything downstream — the plan, the implementation decisions, and the
+flight log entry at the end.
+
 ## Phase 1: Plan
 
 Dispatch a **planning sub-agent** (model: opus) to:

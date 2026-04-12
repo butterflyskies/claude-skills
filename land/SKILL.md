@@ -110,6 +110,11 @@ Write the day's wins entry in `butterflyskies/flight-log`:
 
 If the entry already exists, append new items — don't rewrite what's there.
 
+If a "so what?" framing was established at the start of the session (e.g. via `/develop`
+Phase 0), write the entry against that intent — confirm what was achieved relative to
+the original motivation, not just list what was done. The framing makes entries meaningful
+when read back later.
+
 The tone should be celebratory and specific — what was built, what was fixed, what was
 figured out. Not a dry changelog; a record of progress that's satisfying to read back.
 
