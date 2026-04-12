@@ -37,6 +37,22 @@ You are the orchestrator. Your job:
 You do NOT: read implementation files into your own context, write code directly,
 or run tests yourself. Sub-agents do the focused work.
 
+## Phase 0: Frame the work
+
+Before planning begins, establish the "so what?" — why does this work matter?
+
+- **Who benefits** from this change?
+- **What's the counterfactual** — what happens if we don't do it?
+- **What does success look like** and how would we know?
+
+For small, well-scoped tasks (bug fix with a clear issue, config change), this can be a
+one-sentence acknowledgment. For larger work — new features, architectural changes, greenfield
+components — this is a deliberate pause to align on intent before investing in a plan.
+
+State the framing to the user. If the "so what?" isn't clear from the task description, ask.
+This framing anchors everything downstream — the plan, the implementation decisions, and the
+flight log entry at the end.
+
 ## Phase 1: Plan
 
 Dispatch a **planning sub-agent** (model: opus) to:
@@ -137,9 +153,25 @@ Key constraints for the implementation agent:
 - Use Serena's symbolic editing tools (`replace_symbol_body`, `insert_after_symbol`)
   for precise modifications when appropriate
 - Write or update tests alongside implementation
+- Run `cargo fmt` and `cargo clippy -- -D warnings` (or equivalent) before handing off —
+  formatting and lint issues are the implementation agent's responsibility, not the quality agent's
 - Do not run tests — that's Phase 3's job
 
 After the sub-agent returns, briefly summarize what was implemented.
+
+### Diff-size check
+
+After the implementation agent returns, check the size of the changes:
+```
+git diff --stat | tail -1
+```
+If the net change exceeds ~500 lines, pause and present the user with:
+1. The total LOC added/removed
+2. A proposed split (by file group or functional area)
+3. The option to proceed as-is if splitting doesn't make sense
+
+Large diffs compound review rounds — a 1000-line PR averages 4+ review rounds while
+a 200-line PR typically converges in 1-2.
 
 ## Phase 3: Quality
 
@@ -149,8 +181,9 @@ context is fresh — it has no bias from having written the code.
 See [references/quality-checklist.md](references/quality-checklist.md) for the language-specific
 checks. The quality agent:
 
-1. Runs the formatter (`cargo fmt` / equivalent)
-2. Runs the linter (`cargo clippy -- -D warnings` / equivalent)
+1. Verifies formatting (`cargo fmt -- --check` / equivalent) — the implementation agent
+   should have already fixed these, but verify. If failures remain, fix them.
+2. Verifies lint (`cargo clippy -- -D warnings` / equivalent) — same as above.
 3. Runs the test suite (`cargo nextest run --workspace` / equivalent)
 4. If any step fails: diagnose, fix, and re-run. Report what was fixed.
 5. Checks the diff for:
@@ -177,24 +210,30 @@ duplicate its logic here.
 The code-review skill will post findings to the PR if one exists, or display in-session.
 Collect the findings from the review output.
 
-If there are P1 or P2 findings, present them to the user, then proceed to Phase 4.5.
-If only P3 findings (or none), skip to Phase 5.
+If there are any findings (P1, P2, or P3), present them to the user, then proceed to
+Phase 4.5. All severity levels are addressed — P3 is a priority signal, not a skip signal.
+If there are zero findings, skip to Phase 5.
 
 ## Phase 4.5: Fix and re-review (iterate until clean)
 
-When Phase 4 produces P1 or P2 findings:
+When Phase 4 produces findings:
 
 1. Dispatch an **implementation sub-agent** (model: sonnet) with the findings as its task.
    The sub-agent receives:
+   - The **original plan from Phase 1** and any ADRs written in Phase 1.5 — this preserves
+     architectural intent so fixes don't diverge from the design
    - The full list of P1 and P2 findings with file locations and suggested fixes
-   - P3 findings as optional improvements (fix if trivial, skip if not)
+   - P3 findings for implementation (these are real findings that should be fixed)
    - The same conventions and project context as Phase 2
 
 2. After fixes are applied, dispatch the **quality sub-agent** (model: sonnet) again
    to verify fmt/clippy/tests still pass.
 
-3. Run `/code-review branch` again. The review skill will independently verify the
-   original findings are resolved and check for new issues introduced by the fixes.
+3. Run `/code-review branch --since <last-reviewed-commit>` to use incremental review
+   mode. This scopes the review to only the fix commits, verifies prior findings are
+   resolved, and checks for new issues — without re-reviewing unchanged code.
+   Record the HEAD commit SHA before each review round so you can pass it as `--since`
+   to the next round.
 
 4. **Loop**: if the re-review produces new P1 or P2 findings, repeat from step 1.
    Present each iteration's findings to the user.
@@ -204,7 +243,7 @@ present the remaining findings to the user. Something structural needs human jud
 
 ## Phase 5: Land
 
-After all phases pass (review is clean or user accepts remaining P3s):
+After all phases pass (review is clean):
 
 ### 5a. Summary
 1. Summarize what was done (1-3 bullet points)
