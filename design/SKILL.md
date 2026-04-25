@@ -287,7 +287,7 @@ this in the discussion — it's a data point, not a mandate.
 
 ### If proceeding (option 1 or 2):
 
-Dispatch a **threat modeling sub-agent** (model: opus) to analyze the architecture.
+Dispatch a **threat modeling sub-agent** (model: opus 4.6) to analyze the architecture.
 
 **Sub-agent prompt template:**
 ```
@@ -502,7 +502,7 @@ process may be over-specified for typical task size.
 | Sub-agent | Model | Rationale |
 |-----------|-------|-----------|
 | Architecture diagrams (Phase 3b) | **sonnet** | Mechanical generation from agreed decisions |
-| Threat modeling (Phase 4) | **opus** | Judgment-heavy — must distinguish real threats from noise |
+| Threat modeling (Phase 4) | **opus** (4.6) | Judgment-heavy — must distinguish real threats from noise |
 
 Phases 0, 1, 2, and 5 are coordinator-led (collaborative with the user). The
 coordinator inherits the session model. No sub-agents needed — the value is in the

@@ -55,7 +55,7 @@ flight log entry at the end.
 
 ## Phase 1: Plan
 
-Dispatch a **planning sub-agent** (model: opus) to:
+Dispatch a **planning sub-agent** (model: opus 4.6) to:
 
 1. If `$ARGUMENTS` references an issue, fetch it: `gh issue view <N> --json title,body,comments`
 2. Read the relevant code using Serena's symbolic tools — `get_symbols_overview` for structure,
@@ -298,10 +298,10 @@ Pass the language-specific reference to sub-agents that need it.
 
 | Sub-agent | Model | Rationale |
 |-----------|-------|-----------|
-| Planning | **opus** | Resolves ambiguity, weighs tradeoffs, asks the right questions |
+| Planning | **opus** (4.6) | Resolves ambiguity, weighs tradeoffs, asks the right questions |
 | Implementation | **sonnet** | Concrete execution from a well-defined plan |
 | Quality | **sonnet** | Mechanical verification — run tools, fix what fails |
-| Architectural review | **opus** | Judgment-heavy — completeness gaps, subtle contract breaks, "this will hurt later" |
+| Architectural review | **opus** (4.6) | Judgment-heavy — completeness gaps, subtle contract breaks, "this will hurt later" |
 
 The coordinator inherits the user's session model (typically opus). Use the `model` parameter
 on the Agent tool to set each sub-agent's model explicitly.
