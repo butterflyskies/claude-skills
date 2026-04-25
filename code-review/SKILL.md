@@ -76,7 +76,7 @@ each with `run_in_background: true`. This ensures true concurrent execution — 
 them sequentially wastes time and defeats the purpose of independent analysis. Each agent
 gets the same diff and context but a different analytical lens. The separation ensures
 independent findings — a bug one agent normalizes, another catches. Use **sonnet** for
-sub-agents A and B (mechanical analysis), **opus** for sub-agent C (judgment-heavy
+sub-agents A and B (mechanical analysis), **opus** (4.6) for sub-agent C (judgment-heavy
 architectural review).
 
 ### Sub-agent A: Correctness & Safety
@@ -171,7 +171,7 @@ For each finding, output EXACTLY this format:
 - Fix: <concrete code change or approach>
 ```
 
-### Sub-agent C: Architecture & Security (model: opus)
+### Sub-agent C: Architecture & Security (model: opus 4.6)
 
 ```
 You are reviewing code changes for architectural fitness and security. You did NOT
