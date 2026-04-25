@@ -153,18 +153,41 @@ Do NOT apply all categories mechanically. Flag the ones relevant to this project
 domain and ask the user which merit deeper analysis. Record which categories were
 reviewed and which were deemed not applicable, with a one-line rationale.
 
+For requirements that affect how the system operates in a managed environment —
+logging, monitoring, data handling, records — also consider the relevant ISO 27001:2022
+Annex A controls as a complementary lens. ASVS asks "does the code handle this
+safely?" while ISO 27001 asks "does the system operate securely?" The key controls:
+
+- A.5.33: Protection of records (integrity, retention, access control on logs/audit trails)
+- A.8.10: Information deletion (data retention, right to erasure)
+- A.8.11: Data masking (sensitive data redaction in outputs, logs, traces)
+- A.8.12: Data leakage prevention (preventing sensitive data exposure through side channels)
+- A.8.15: Logging (security-relevant events captured at appropriate levels)
+- A.8.16: Monitoring activities (enabling anomaly detection in downstream systems)
+- A.8.17: Clock synchronization (reliable timestamps for correlation and forensics)
+
+Apply the same principle as ASVS: flag relevant controls, discuss with the user,
+record which were reviewed and which were set aside. These two frameworks overlap
+in places (ASVS V7 and A.8.15 both cover logging) — when they do, note both
+references rather than picking one.
+
 ### 2c. Security Requirements Traceability Matrix (SRTM)
 
 Build a traceability matrix linking:
-`Use Case -> Requirement -> ASVS Category (if applicable) -> Test Case (placeholder)`
+`Use Case -> Requirement -> Security Reference (if applicable) -> Test Case (placeholder)`
+
+The security reference column captures ASVS categories and/or ISO 27001 controls
+where applicable. When both frameworks cover the same concern (e.g. ASVS V7 and
+A.8.15 for logging), list both.
 
 The test case column starts as placeholders (e.g., "TC-01: verify...") — Phase 5
 fills these in as a concrete test plan.
 
 ```
-| Req ID | Requirement | Source UC | ASVS | Test Case |
-|--------|-------------|-----------|------|-----------|
+| Req ID | Requirement | Source UC | Security Ref | Test Case |
+|--------|-------------|-----------|--------------|-----------|
 | R-01 | System shall validate file type | UC-01, AC-01 | V12.1 | TC-01 (pending) |
+| R-02 | Security events logged at warn+ | SC-01 | V7.2, A.8.15 | TC-02 (pending) |
 ```
 
 **Artifact**: Write `docs/design/requirements.md` (includes use case table, requirements,
