@@ -39,6 +39,11 @@ or run tests yourself. Sub-agents do the focused work.
 
 ## Phase 0: Frame the work
 
+**Environment detection** — run alongside language detection:
+1. Check git town availability and config (see [references/git-workflow.md](references/git-workflow.md) §1)
+2. If git town has a suspended command (`git-town status --pending`), surface it to the user
+3. Report git town status alongside language to the user
+
 Before planning begins, establish the "so what?" — why does this work matter?
 
 - **Who benefits** from this change?
@@ -168,7 +173,9 @@ git diff --stat | tail -1
 If the net change exceeds ~500 lines, pause and present the user with:
 1. The total LOC added/removed
 2. A proposed split (by file group or functional area)
-3. The option to proceed as-is if splitting doesn't make sense
+3. **If git town is available**: offer to split into a stacked branch set
+   (see [references/git-workflow.md](references/git-workflow.md) §3)
+4. The option to proceed as-is if splitting doesn't make sense
 
 Large diffs compound review rounds — a 1000-line PR averages 4+ review rounds while
 a 200-line PR typically converges in 1-2.
@@ -305,6 +312,22 @@ Pass the language-specific reference to sub-agents that need it.
 
 The coordinator inherits the user's session model (typically opus). Use the `model` parameter
 on the Agent tool to set each sub-agent's model explicitly.
+
+## Git workflow
+
+See [references/git-workflow.md](references/git-workflow.md) for the full reference
+on worktrees, stacked diffs, and git town integration.
+
+Key points for the develop workflow:
+- **Worktrees are the default** — multiple sessions may run concurrently with no
+  coordination layer. Every session and sub-agent that writes files should use its
+  own worktree. Sub-agents get this via `isolation: "worktree"` on the Agent tool.
+- **Sub-agent interactivity** — sub-agents run in a non-interactive shell. Git town
+  commands that launch TUI dialogs or open browsers will block. Use non-interactive
+  equivalents (see reference §2).
+- **Stacking** — when git town is available and the diff-size check suggests splitting,
+  use stacked branches to keep PRs small and independently reviewable.
+- **Never stash** — stash is shared across worktrees. Always commit, even as WIP.
 
 ## Guidelines
 

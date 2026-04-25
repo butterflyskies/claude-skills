@@ -405,6 +405,20 @@ The skill respects project-level overrides. If a project's memory-mcp memories c
 - **extra_patterns**: additional domain-specific patterns to check
 - **severity_overrides**: reclassify certain finding types (e.g., `dead_code: P3→ignore`)
 
+## Stacked branch awareness
+
+When reviewing a branch that is part of a git town stack (check with
+`git config git-town.parent` or `git town branch`):
+
+- **Scope the diff correctly** — the PR diff should be against the parent branch,
+  not main. If reviewing via `branch`, use `git diff $(git config git-town.parent)...HEAD`
+  to get only this branch's changes.
+- **Fixing findings on an earlier branch** — if a finding traces to code introduced
+  in a parent branch (not this PR), note which branch owns the code. The fix should
+  target that branch, not the current one. See
+  [develop/references/git-workflow.md](../develop/references/git-workflow.md) §5 for
+  the worktree-based fix pattern.
+
 ## Guidelines
 
 - **No style nits** — formatting, naming conventions, and whitespace are for linters, not review

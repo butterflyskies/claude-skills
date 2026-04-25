@@ -143,3 +143,5 @@ Report:
 - All work happens on feature branches — never commit to main
 - Branch naming: `feature/<short-description>` or `fix/<short-description>`
 - If no feature branch exists yet, create one before making changes
+- See [git-workflow.md](git-workflow.md) for worktree isolation, stacked diffs
+  with git town, and sub-agent interactivity rules
