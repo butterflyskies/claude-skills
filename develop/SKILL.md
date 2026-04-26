@@ -8,9 +8,25 @@ description: "End-to-end development workflow with sub-agent specialization. Use
 Implement changes using specialized sub-agents, each with a dedicated context window.
 The coordinator (you) stays lean — orchestrate, don't accumulate.
 
-Use memory-mcp to load `required-environment-variables` and `rust-code-standards` memories
-(scope: global) if not already loaded this session. Check for project-scoped memories (use
-`list` filtered by project scope) — pass their contents to sub-agents as context.
+## Step 0: Load references (mandatory, unconditional)
+
+Before any other work, read **all** files in `references/` using the Read tool:
+
+- [references/git-workflow.md](references/git-workflow.md) — worktree isolation, stacked diffs, git town
+- [references/implementation-guide.md](references/implementation-guide.md) — sub-agent prompt template, pre-flight checklist
+- [references/quality-checklist.md](references/quality-checklist.md) — language-specific verification steps
+- [references/rust.md](references/rust.md) — Rust conventions (or the language-appropriate reference)
+- [references/repo-setup.md](references/repo-setup.md) — branch protection, first-PR setup
+- [references/review-dimensions.md](references/review-dimensions.md) — code review sub-agent dimensions
+- [references/migration-checklist.md](references/migration-checklist.md) — dependency/module migration
+
+These inform every downstream decision — worktree discipline, sub-agent prompts,
+quality checks, review criteria. Do not skip this step. "Stay lean" means don't read
+implementation code into coordinator context; it does not mean skip your own reference docs.
+
+Then load memory-mcp memories: `required-environment-variables` and `rust-code-standards`
+(scope: global). Check for project-scoped memories (use `list` filtered by project scope)
+— pass their contents to sub-agents as context.
 
 ## Argument handling
 
