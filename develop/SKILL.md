@@ -247,10 +247,11 @@ checks. The quality agent:
 2. Verifies lint (`cargo clippy -- -D warnings` / equivalent) — same as above.
 3. Runs the test suite (`cargo nextest run --workspace` / equivalent) against `@`,
    which has the full stack applied.
-4. **Per-layer build check** (for stacks of 2+ layers): for each layer, check out
-   that change with `jj edit <change>`, verify it builds (`cargo check`), then
-   `jj edit @` (or the original tip) to return. This catches "layer 2 doesn't
-   compile without layer 3" gaps that break the stacked-review story.
+4. **Per-layer build check** (for stacks of 2+ layers): first, capture the current
+   tip's change ID (`jj log -r @ -T 'change_id' --no-graph`). Then for each layer,
+   check out that change with `jj edit <change>` and verify it builds (`cargo check`).
+   After the loop, restore the tip with `jj edit <saved-tip-id>`. This catches
+   "layer 2 doesn't compile without layer 3" gaps that break the stacked-review story.
 5. If any step fails: diagnose, fix, and re-run. Fixes go in a new change at the
    top of the stack — do not amend earlier layers, that loses the review history.
 6. Checks the diff for:
@@ -364,21 +365,27 @@ there now.
 jj git fetch
 ```
 
-Determine the bottom of the stack. For each layer's bookmark (in stack order),
-check the PR state:
+Determine the bottom of the stack. Start from the change IDs in the stack
+(`jj log -r 'stack()' -T 'change_id ++ "\n"' --no-graph`), ordered root-first.
+
+If bookmarks already exist for these layers (i.e., this is not the first publish),
+check each layer's PR state to find the current bottom:
 
 ```bash
-gh pr view <bookmark-name> --json state,reviewDecision --jq '{state, reviewDecision}'
+gh pr view <bookmark-name> --json state --jq '.state'
 ```
 
 The first bookmark whose PR is **not** in `MERGED` state is the current bottom.
 Layers below that point are content-redundant with main (their squash commits
 are already in main).
 
+If no bookmarks exist yet (first-time publish), the bottom is the root of the
+stack — the oldest change in `stack()`.
+
 Rebase the stack from the bottom:
 
 ```bash
-jj rebase -s pr/<bottom-of-stack-slug> -d main
+jj rebase -s <bottom-change-id> -d main
 ```
 
 `jj rebase -s <change> -d <dest>` rebases the named change *and all its

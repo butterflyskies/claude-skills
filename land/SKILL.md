@@ -128,7 +128,7 @@ is `Friday Focus — Mon DD` (e.g., "Friday Focus — Feb 13").
    b. Move all open issues from the past-due milestone to the current/new milestone.
       The GitHub API requires `milestone` as a JSON integer, not a string. Use:
       ```
-      gh api repos/<owner>/<repo>/issues/<num> --input - <<< '{"milestone": <int>}'
+      gh api repos/<owner>/<repo>/issues/<num> --method PATCH --input - <<< '{"milestone": <int>}'
       ```
       Do NOT use `-f milestone=<num>` (sends a string, gets HTTP 422).
    c. After carry-forward, check the old milestone's issue counts:
