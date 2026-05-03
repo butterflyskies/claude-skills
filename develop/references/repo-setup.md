@@ -9,11 +9,12 @@ operations use jj.
 Configure via `gh api` after repo creation:
 
 1. **Require pull request before merging** — no direct pushes to main
-2. **Require linear history** — enforces rebase or squash (no merge commits cluttering
+2. **Require linear history** — enforces squash merge (no merge commits cluttering
    history). This is the natural fit for stacked PRs.
-3. **All merge types allowed** — merge, squash, and rebase all permitted. For stacked
-   PRs, "rebase and merge" is usually the right choice — it preserves each layer's
-   commit identity.
+3. **Squash merge only** — disable "merge commit" and "rebase and merge" in repo
+   settings. Squash merge keeps the main-branch history clean (one commit per PR)
+   and jj's content-aware rebase handles the local/remote SHA divergence naturally
+   (see stacking-conventions.md "Squash-merge: what happens to the local change").
 4. **No force-push to main** — ever
 
 ```bash
@@ -47,8 +48,8 @@ is needed — the AI can self-merge after CI passes. Adjust per repo if human re
   See [../../references/stacking-conventions.md](../../references/stacking-conventions.md).
 - **Never commit directly to main** — `main` is the published trunk. All work is on
   `pr/<slug>` bookmarks pushed via `jj git push`.
-- **Linear history** — stacked PRs land via "rebase and merge" to preserve the layer
-  structure on main. Squash-merge is fine for single-layer PRs.
+- **Squash merge** — all PRs land via squash merge. jj's content-aware rebase
+  handles the local/remote SHA divergence naturally.
 
 ## Pre-push quality gates
 
@@ -66,9 +67,9 @@ cargo nextest run --workspace || { echo "Tests failing"; exit 1; }
 exec jj git push "$@"
 ```
 
-Alternative: register a git hook on the colocated repo at `.git/hooks/pre-push`. Git
-hooks fire even on `jj git push` because that ultimately invokes git's push under the
-hood. Same script content as above, minus the wrapper exec.
+Note: `.git/hooks/pre-push` does **not** fire on `jj git push` — jj bypasses git
+hooks entirely (it writes directly to the git object store). The shell wrapper
+above is the only reliable local pre-push gate.
 
 These gates enforce: format check, lint check (zero warnings), test suite passes,
 build succeeds. Code that doesn't pass format + lint + tests does not leave the
@@ -157,7 +158,8 @@ jj git init --colocate
 echo "# <name>" > README.md
 jj describe -m "Initial commit"
 jj bookmark set main -r @
-jj git push --bookmark main --allow-new
+jj bookmark track main@origin
+jj git push --bookmark main
 ```
 
 After the first push, configure branch protection (above) before any feature work.

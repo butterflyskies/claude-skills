@@ -58,8 +58,9 @@ the last published bookmark.
 4. For reference files: update or create as needed
 5. Review your edits — read the modified files back to verify correctness
 
-jj snapshots automatically — no `git add` needed. The current change accumulates
-your edits.
+jj snapshots the working copy when any `jj` command runs — no `git add` needed.
+Run `jj util snapshot` to force a snapshot if needed. The current change
+accumulates your edits.
 
 ## Phase 3: Detect and analyze all changes
 

@@ -321,9 +321,9 @@ Also check for concrete injection vectors:
   and tracing instrumentation on structs that hold secrets.
 - Secrets in jj/git: are tokens, keys, or credentials hardcoded or at risk of being
   committed? Check for missing .gitignore entries, secrets in config files, or test
-  fixtures containing real credentials. Note: jj snapshots automatically, so a secret
-  added to the working copy is *already* in a jj change — `jj abandon` and rewrite
-  ancestors if you find one.
+  fixtures containing real credentials. Note: jj snapshots the working copy on every
+  `jj` invocation, so a secret added to the working copy is captured as soon as any
+  `jj` command runs — `jj abandon` and rewrite ancestors if you find one.
 - Trust boundaries: where does external input enter the system? Is it validated before
   use? Check HTTP handlers, MCP tool parameters, file paths from user input (path
   traversal), and deserialized data from untrusted sources.

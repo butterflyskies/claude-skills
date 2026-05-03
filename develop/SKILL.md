@@ -189,22 +189,24 @@ Each sub-agent works in isolation — it gets its layer's plan, conventions, and
 file paths, then writes the code. See [references/implementation-guide.md](references/implementation-guide.md)
 for the detailed prompt template and conventions checklist passed to this agent.
 
-**Critical jj convention**: each layer is its own jj change. The coordinator runs
-`jj new` between layers to create the chain:
+**Critical jj convention**: each layer is its own jj change. The sub-agent owns
+the jj transitions for its assigned layer(s). The coordinator tells each sub-agent:
+- The current change ID it's starting from
+- How many layers to create and what each contains
+- The commit message convention (`Layer N: <intent>`)
 
+The sub-agent runs `jj new -m "..."` to advance between layers and `jj describe`
+to finalize commit messages. jj only snapshots the working copy when a jj command
+is invoked — it is not a background process. This is why sub-agents must run jj
+commands themselves: their file edits aren't captured until jj runs.
+
+After each sub-agent returns, the coordinator validates the stack shape:
 ```bash
-jj new -m "Layer 1: <intent>"
-# dispatch sub-agent for layer 1
-# sub-agent edits files; jj snapshots automatically
-jj describe -m "<final commit message for layer 1>"
-jj new -m "Layer 2: <intent>"
-# dispatch sub-agent for layer 2
-# ...
+jj log -r 'stack()'
 ```
-
-The implementation agent does not run `jj` commands — the coordinator manages the
-chain. The agent just edits files; jj's automatic snapshotting captures the work
-into the current change.
+If the sub-agent created changes in the wrong place or with wrong structure, the
+coordinator fixes it with `jj squash`, `jj split`, or `jj rebase` — these are all
+non-destructive in jj.
 
 Key constraints for the implementation agent:
 - Follow the plan from Phase 1 — diverge only when engineering judgment requires it,
@@ -215,7 +217,7 @@ Key constraints for the implementation agent:
 - Run `cargo fmt` and `cargo clippy -- -D warnings` (or equivalent) before handing off —
   formatting and lint issues are the implementation agent's responsibility, not the quality agent's
 - Do not run tests — that's Phase 3's job
-- Do not run jj commands — the coordinator manages the change chain
+- Run `jj new` between layers and `jj describe` to set commit messages
 
 After all layers complete, briefly summarize what was implemented per layer.
 

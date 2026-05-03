@@ -16,7 +16,8 @@ of (a) commits arranged in a chain, (b) bookmarks placed on each commit, and
 
 ## Revset aliases
 
-These aliases are added to project (or user) `.jj/config.toml`:
+These aliases must be installed in the user or repo jj config. The `/jj-setup`
+skill installs them automatically; see below for the definitions.
 
 ```toml
 [revset-aliases]
@@ -33,6 +34,37 @@ These aliases are added to project (or user) `.jj/config.toml`:
 If `bookmark_base()` resolves to nothing (no remote bookmarks in ancestry), the
 skills fall back to `trunk()..@`. The `trunk()` revset is jj's built-in for
 the project's main line, configurable via `revsets.trunk`.
+
+## Required jj configuration
+
+These settings are installed by `/jj-setup` and required for the workflow:
+
+```toml
+[snapshot]
+auto-update-stale = true         # auto-recover stale workspaces (multi-agent safety)
+
+[remotes.origin]
+auto-track-created-bookmarks = "glob:pr/*"   # no --allow-new ceremony for pr/ bookmarks
+```
+
+- `snapshot.auto-update-stale` ensures that workspaces staled by cross-workspace
+  rebases auto-recover on the next `jj` command, rather than blocking with an error.
+- `auto-track-created-bookmarks` replaces the deprecated `--allow-new` flag on
+  `jj git push` (deprecated in jj 0.36). New `pr/` bookmarks are automatically
+  tracked with origin and can be pushed without extra ceremony.
+
+### Programmatic snapshotting
+
+jj only snapshots the working copy when a `jj` command is invoked — it is NOT a
+background file watcher. If you need to force a snapshot (e.g., to ensure file
+edits are captured before reading state), use:
+
+```bash
+jj util snapshot
+```
+
+This is especially important for sub-agents that edit files and then need to
+verify the state of the change before reporting back.
 
 ## Bookmark naming
 
@@ -311,15 +343,18 @@ bookmarks). Open one Claude Code session per workspace directory.
 - The shared op log records every operation across all workspaces, so you can
   see what each session did via `jj op log`.
 
-### What's not safe across workspaces
+### Workspace boundaries
 
-- **Never edit a change that is the working-copy commit of another workspace.**
-  jj refuses with "stale working copy" errors. The skills don't do this in
-  normal operation, but it's worth knowing if you manually run `jj edit` on a
-  change ID without realizing it belongs to another session's `@`.
-- **Don't share bookmarks across sessions.** Each session manages its own
-  `pr/<slug>` bookmarks. If two sessions try to push the same bookmark name,
-  jj refuses (the remote tip won't match what each thinks).
+- **Each workspace owns its own changes and bookmarks.** Always work forward
+  within your own stack using `jj new`. The coordinator handles cross-workspace
+  operations like squashing fixes into another workspace's layers.
+- **Each session manages its own `pr/<slug>` bookmarks.** Bookmark names are
+  unique per session — two sessions pushing the same bookmark name causes jj
+  to refuse (the remote tip won't match).
+- **Editing a change that is another workspace's `@`** makes that workspace stale.
+  With `snapshot.auto-update-stale = true` the other workspace auto-recovers,
+  but it can disrupt a mid-operation agent. The coordinator is the only actor
+  that should touch changes across workspace boundaries.
 
 ### Coordinating after a merge
 
