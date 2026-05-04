@@ -1,0 +1,398 @@
+# Stacking Conventions for jj-Backed Workflows
+
+This document defines how jj changes map to GitHub PRs when shipping stacked work.
+The `/develop`, `/land`, and `/code-review` skills all use these conventions.
+
+## Mental model
+
+A **stack** is a contiguous chain of jj changes built on top of the most recent
+published bookmark. Each change in the stack becomes its own PR with its own
+review thread. The PRs depend on each other — PR #2 is based on PR #1's
+bookmark, not on `main`.
+
+Stacks are not a special object in jj or GitHub. They are an emergent property
+of (a) commits arranged in a chain, (b) bookmarks placed on each commit, and
+(c) PRs whose `--base` points at the previous commit's bookmark.
+
+## Revset aliases
+
+These aliases must be installed in the user or repo jj config. The `/jj-setup`
+skill installs them automatically; see below for the definitions.
+
+```toml
+[revset-aliases]
+'bookmark_base()' = 'latest(::@ & remote_bookmarks())'
+'stack()' = 'bookmark_base()..@'
+```
+
+- `bookmark_base()` is the most recent ancestor of `@` that's tracked on a remote.
+  This is "the last thing I published" — main, a previously-merged feature
+  bookmark, or the previous PR's bookmark in a stack.
+- `stack()` is everything from there up to the working copy. This is the natural
+  scope for review, planning, and landing.
+
+If `bookmark_base()` resolves to nothing (no remote bookmarks in ancestry), the
+skills fall back to `trunk()..@`. The `trunk()` revset is jj's built-in for
+the project's main line, configurable via `revsets.trunk`.
+
+## Required jj configuration
+
+These settings are installed by `/jj-setup` and required for the workflow:
+
+```toml
+[snapshot]
+auto-update-stale = true         # auto-recover stale workspaces (multi-agent safety)
+
+[remotes.origin]
+auto-track-created-bookmarks = "glob:pr/*"   # no --allow-new ceremony for pr/ bookmarks
+```
+
+- `snapshot.auto-update-stale` ensures that workspaces staled by cross-workspace
+  rebases auto-recover on the next `jj` command, rather than blocking with an error.
+- `auto-track-created-bookmarks` replaces the deprecated `--allow-new` flag on
+  `jj git push` (deprecated in jj 0.36). New `pr/` bookmarks are automatically
+  tracked with origin and can be pushed without extra ceremony.
+
+### Programmatic snapshotting
+
+jj only snapshots the working copy when a `jj` command is invoked — it is NOT a
+background file watcher. If you need to force a snapshot (e.g., to ensure file
+edits are captured before reading state), use:
+
+```bash
+jj util snapshot
+```
+
+This is especially important for sub-agents that edit files and then need to
+verify the state of the change before reporting back.
+
+## Bookmark naming
+
+Bookmarks for stacked PRs use the prefix `pr/`:
+
+- `pr/add-jj-stacking-skill`
+- `pr/fix-mutex-poisoning`
+- `pr/refactor-config-loader`
+
+Naming guidelines:
+- Short slug, kebab-case, descriptive
+- The slug should match the PR title's intent, not be a verbatim copy
+- Do not include numbers or stack position in the name — stack position
+  changes when the stack is rewritten
+- Avoid `feature/`, `fix/`, `chore/` prefixes — those are git-flow conventions
+  that don't fit the jj model where the change ID *is* the identity
+
+## Stack workflow
+
+### Building a stack
+
+```
+jj new bookmark_base()           # start from last published thing
+# ... edit, jj new, edit, jj new ...
+```
+
+Each `jj new` creates a new working-copy commit. Each commit in the stack will
+become a PR.
+
+### Setting bookmarks for the stack
+
+When ready to land:
+
+```
+jj bookmark set pr/layer-1 -r <change-id-1>
+jj bookmark set pr/layer-2 -r <change-id-2>
+jj bookmark set pr/layer-3 -r <change-id-3>
+```
+
+Use change IDs (the alphabetic ones), not commit IDs (hex). Change IDs are stable
+across rebases; commit IDs are not.
+
+### Pushing the stack
+
+```
+jj git push --bookmark pr/layer-1 --bookmark pr/layer-2 --bookmark pr/layer-3
+```
+
+If any bookmark already exists on the remote (a re-push after stack rewrite), jj
+detects this and force-pushes safely. There is no `--force-with-lease` flag in jj
+because jj's push semantics already check that the remote tip is what jj
+last knew about — it refuses to clobber concurrent updates from elsewhere.
+
+### Opening PRs for the stack
+
+For each bookmark, create a PR whose base is the previous bookmark (or `main`
+for the bottom of the stack):
+
+```
+gh pr create --base main --head pr/layer-1 --title "..." --body "..."
+gh pr create --base pr/layer-1 --head pr/layer-2 --title "..." --body "..."
+gh pr create --base pr/layer-2 --head pr/layer-3 --title "..." --body "..."
+```
+
+Each PR's diff on GitHub shows only its own commit's changes, which is what
+makes stacked review work.
+
+### Stack metadata in PR bodies
+
+Each PR body ends with an auto-generated stack footer:
+
+```
+---
+**Stack** (2 of 3)
+- #1234 — pr/layer-1: add interface
+- **#1235 — pr/layer-2: add caching** (this PR)
+- #1236 — pr/layer-3: wire up the rest
+
+Generated by /land. Re-run /develop land to refresh.
+```
+
+The skill regenerates this footer every time it runs. The footer is delimited
+by `---` and a header line so it can be detected and replaced without affecting
+the rest of the PR description.
+
+## Pre-push: fetch and rebase
+
+Every `/develop land` invocation fetches and rebases the stack onto current
+`main` before pushing. This is unconditional — main may have moved due to a
+PR merge (yours, an external contributor's, or another concurrent session's),
+and your stack needs to land on top of whatever's there now.
+
+The mechanics:
+
+```bash
+jj git fetch
+jj rebase -s pr/<bottom-of-stack-slug> -d main
+```
+
+`jj rebase -s <change> -d <dest>` rebases the named change *and all its
+descendants*. You target the bottom of the stack; jj carries the rest along.
+
+If the bottom of the stack is itself a merged PR (its squash landed on main),
+the local change is now content-redundant with main. The skill detects this by
+checking PR state: if the bookmark's PR is in `MERGED` state, treat the next
+change up as the new bottom.
+
+```bash
+# Example: pr/layer-1 just merged via squash
+jj git fetch                                  # pulls the squash commit M1 into main
+jj rebase -s pr/layer-2 -d main               # replants layer-2 and layer-3 onto new main
+jj abandon <old-layer-1-change-id>            # optional cleanup; jj GCs eventually
+```
+
+The rebase is **always narrated**, even when clean. The skill prints something
+like:
+
+```
+Rebased 3 changes onto new main (origin advanced by 1 commit since last fetch).
+```
+
+This makes the operation legible — you can see at a glance whether the stack
+moved and by how much. Conflicts during rebase are surfaced for resolution; jj
+records them in the conflicted commit rather than blocking, but the skill
+flags them so they don't slip through silently.
+
+## Squash-merge: what happens to the local change
+
+GitHub repos requiring linear history typically use squash-merge. When PR #1's
+bookmark is squash-merged:
+
+1. GitHub takes layer-1's commit content and creates a new commit on `main`
+   with a fresh SHA. Call this `M1`. The PR title becomes the commit subject;
+   the PR description becomes the body.
+2. Your local `layer-1` change still exists in jj's history with the old SHA,
+   but `M1` on main contains identical content.
+3. The local `pr/layer-1` bookmark (and the remote one, unless GitHub deleted
+   it) still points at the old pre-squash SHA.
+
+After `jj git fetch` brings `M1` into local main, `jj rebase -s pr/layer-2 -d main`
+sees that layer-2's prerequisite content (layer-1's changes) is already in main
+as `M1` and proceeds without needing to re-apply it. layer-2 rebases cleanly
+onto the new main, layer-3 follows.
+
+The local `layer-1` change is now an orphan — same content as `M1`, but a
+different SHA, no longer in any stack. `jj abandon` removes it from the visible
+log. jj's garbage collection eventually removes the underlying object.
+
+This is why the workflow is squash-merge-friendly: jj's content-aware rebase
+handles the "your local commit and main's squash commit have the same content
+but different SHAs" case naturally. You don't need to switch to rebase-and-merge
+to keep the workflow clean.
+
+## Approval-state warning before push
+
+Before pushing to a bookmark, the skill checks whether the corresponding PR
+is in `APPROVED` review state:
+
+```bash
+gh pr view <N> --json reviewDecision --jq '.reviewDecision'
+```
+
+If `APPROVED`, the skill warns and asks for confirmation:
+
+```
+PR #1234 (pr/layer-2) is already approved. Pushing will dismiss the approval
+and require re-review. Continue? (y/N)
+```
+
+This matches the convention of invalidating reviews on post-approval changes —
+sneaking changes in past approval is bad practice. The warning makes the
+dismissal explicit rather than accidental. The user can confirm to proceed.
+
+## Out-of-order stack merges
+
+Stacked PRs are designed to merge bottom-up. If somehow PR #2 merges before
+PR #1 (manually changed base, deliberate intervention), the skill doesn't
+panic. `jj rebase -s <new-bottom> -d main` still works — jj's content-aware
+rebase handles the case where `M2` (the squash of layer-2) is now in main but
+layer-1 isn't. layer-1's content still applies to main; jj just rebases it
+onto a main that already contains layer-2's changes.
+
+The result is a slightly weird stack where layer-1's PR is now technically
+based on a main that includes layer-2's content. GitHub may or may not display
+this sensibly. If it gets confused, manually update PR #1's base to `main` and
+treat it as a standalone PR rather than part of the original stack.
+
+## Stack rewrites
+
+When you address review on an earlier layer:
+
+```
+jj edit <change-id-of-layer-1>
+# make changes
+jj describe -m "..."
+jj new                            # back to working on top
+```
+
+jj automatically rebases descendants. The bookmarks that were pointing at
+old commit IDs now need to move:
+
+```
+jj bookmark set pr/layer-1 -r <new-change-id-1>
+jj bookmark set pr/layer-2 -r <new-change-id-2>
+jj bookmark set pr/layer-3 -r <new-change-id-3>
+```
+
+Then push the whole stack again:
+
+```
+jj git push --bookmark pr/layer-1 --bookmark pr/layer-2 --bookmark pr/layer-3
+```
+
+`/develop land` automates the move-and-push step when the stack already exists
+on the remote — it diffs current bookmark positions against where they should
+be and moves only what changed.
+
+## When a middle PR needs to be split
+
+If review on PR #2 reveals it should be two PRs:
+
+```
+jj split <change-id-of-layer-2>
+```
+
+This produces two changes where there was one. Set new bookmarks:
+
+```
+jj bookmark set pr/layer-2a -r <first-half>
+jj bookmark set pr/layer-2b -r <second-half>
+jj bookmark forget pr/layer-2     # the old name is gone
+```
+
+Open a new PR for `pr/layer-2b`. The existing PR #2 now points at
+`pr/layer-2a` content — close and reopen, or update the title/description.
+This is a manual step; `/develop land` doesn't try to be clever about splits.
+
+## When a stack should be reordered
+
+```
+jj rebase -s <change-id> -d <new-parent>
+```
+
+Bookmarks on the moved changes move with them. Bookmark *positions* may need
+adjustment if the reorder changes which commit is "layer 1" vs "layer 2".
+The `pr/` slugs are intent-based, not position-based, so the names stay valid.
+
+## Concurrent sessions in one repo
+
+Multiple Claude Code sessions can work on different stacks in the same repo
+concurrently. The pattern is **one jj workspace per session**.
+
+### Setup
+
+```
+jj git clone <url> myrepo
+cd myrepo
+jj workspace add ../myrepo-session-2 --name session-2
+jj workspace add ../myrepo-session-3 --name session-3
+```
+
+Each workspace has its own `.jj/working_copy/` and its own working-copy commit,
+but all workspaces share the same underlying `.jj/repo/` (commits, op log,
+bookmarks). Open one Claude Code session per workspace directory.
+
+### What's safe across workspaces
+
+- Each workspace has its own working copy — agents can't clobber each other's
+  files.
+- Each workspace has its own stack rooted at its own `bookmark_base()`. The
+  stacks are siblings in the commit graph, visible to each other via `jj log`
+  but isolated for purposes of editing.
+- `jj git fetch` and `jj rebase -s <my-stack-bottom> -d main` work normally
+  inside each workspace. You're only rebasing your own stack onto main; you're
+  not touching any other workspace's commits.
+- The shared op log records every operation across all workspaces, so you can
+  see what each session did via `jj op log`.
+
+### Workspace boundaries
+
+- **Each workspace owns its own changes and bookmarks.** Always work forward
+  within your own stack using `jj new`. The coordinator handles cross-workspace
+  operations like squashing fixes into another workspace's layers.
+- **Each session manages its own `pr/<slug>` bookmarks.** Bookmark names are
+  unique per session — two sessions pushing the same bookmark name causes jj
+  to refuse (the remote tip won't match).
+- **Editing a change that is another workspace's `@`** makes that workspace stale.
+  With `snapshot.auto-update-stale = true` the other workspace auto-recovers,
+  but it can disrupt a mid-operation agent. The coordinator is the only actor
+  that should touch changes across workspace boundaries.
+
+### Coordinating after a merge
+
+When a PR from session A merges:
+- Session A's stack picks it up automatically the next time `/develop land`
+  runs (fetch, detect-merged-bottom, rebase what's left).
+- Sessions B and C don't notice until *they* next run `/develop land`. At that
+  point their fetch pulls the new main, their rebase replants their stacks.
+  No coordination needed; the discipline is "fetch-and-rebase before every
+  push," which `/develop land` enforces unconditionally.
+
+There is no global "rebase all workspaces now" command. Each workspace handles
+its own rebase the next time it pushes. Stacks that haven't run `/develop land`
+since the merge will see stale main locally, which is fine until they push.
+
+## Initial repo setup with jj workspaces
+
+For a project that will run multiple concurrent sessions:
+
+```bash
+jj git clone <url> myrepo                           # main workspace
+cd myrepo
+jj config set --workspace ui.editor 'code --wait'   # per-workspace config
+```
+
+Add additional workspaces as needed:
+
+```bash
+jj workspace add ../myrepo-feature-x --name feature-x
+jj workspace add ../myrepo-bugfix-y --name bugfix-y
+```
+
+When a session is done, retire its workspace:
+
+```bash
+jj workspace forget feature-x
+rm -rf ../myrepo-feature-x
+```
+
+`jj workspace forget` removes the workspace from jj's tracking; the directory
+removal is separate (`jj workspace forget` does not delete files).

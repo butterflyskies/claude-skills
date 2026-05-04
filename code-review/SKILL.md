@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Systematic code review with sub-agent analysis. Works on PRs, branches, files, or staged changes."
+description: "Systematic code review with sub-agent analysis. Works on jj revsets, single changes, PRs, or working-copy edits."
 ---
 
 # /code-review — Systematic Code Review
@@ -15,59 +15,118 @@ this review will seed it.
 
 ## Argument handling
 
-`$ARGUMENTS` determines the review scope:
+`$ARGUMENTS` determines the review scope. The default is `stack`, which uses the
+revset alias defined in [references/stacking-conventions.md](../references/stacking-conventions.md).
 
-| Argument             | Scope                                         |
-|----------------------|-----------------------------------------------|
-| *(empty)*            | All uncommitted changes (staged + unstaged)   |
-| `pr` or `pr <N>`     | Current branch's PR diff, or PR #N            |
-| `branch`             | All commits on current branch vs base          |
-| `file <path>`        | Single file, full review                      |
-| `files <glob>`       | Multiple files matching pattern               |
-| `commit <ref>`       | Single commit diff                            |
-| `--since <ref>`      | Incremental: only commits since `<ref>`       |
+| Argument                    | Scope                                                |
+|-----------------------------|------------------------------------------------------|
+| *(empty)* or `stack`        | `bookmark_base()..@` — the current stack from last published bookmark |
+| `change <id>`               | Single jj change (use the alphabetic change ID)      |
+| `range <revset>`            | Any jj revset, e.g. `pr/layer-1..pr/layer-2`         |
+| `working`                   | Working-copy diff only — `@-..@`                     |
+| `pr` or `pr <N>`            | The change(s) backing the current branch's PR, or PR #N |
+| `--since <change-id>`       | Modifier on any scope: limit to descendants of `<change-id>` |
+
+If `bookmark_base()` resolves to nothing (no remote bookmarks in ancestry), fall
+back to `trunk()..@` and tell the user this happened.
+
+If the resolved revset is empty, report it and stop. The most common reason is
+that `@` is sitting on a published bookmark with no work on top — the user
+needs to `jj new` first.
 
 ### Incremental review mode (`--since`)
 
-When `--since <commit-sha>` is appended to any scope argument (e.g., `branch --since abc123`),
-the review operates in **incremental mode** for fix-round efficiency:
+When `--since <change-id>` is appended (e.g., `stack --since abcdefg`), the
+review operates in **incremental mode** for fix-round efficiency:
 
-1. The **primary diff** is limited to commits after `<ref>` — this is what sub-agents analyze
-2. Sub-agents also receive a **prior findings summary** — the findings from the previous round,
-   with their status (fixed, still-open, or deferred-with-rationale)
+1. The **primary diff** is limited to the descendants of `<change-id>` intersected
+   with the base scope. Sub-agents analyze only this subset.
+2. Sub-agents also receive a **prior findings summary** — the findings from the
+   previous round, with their status (fixed, still-open, or deferred-with-rationale).
 3. Sub-agents are instructed to:
    - Verify each prior finding is addressed (fixed in the new commits or explicitly deferred)
    - Flag **new issues** introduced by the fix commits
    - Only cross-reference unchanged code when the new changes directly affect it
    - Not re-review code that hasn't changed since the last review
 4. The coordinator merges the incremental findings with the prior findings to produce a
-   cumulative status report
+   cumulative status report.
 
-This mode cuts review time on rounds 2+ significantly by preventing re-analysis of
-already-reviewed, unchanged code. The `/develop` skill's Phase 4.5 should use this mode
-automatically when re-invoking `/code-review` after fixes.
+Change IDs are stable across rebases in jj, so `--since` survives `jj squash`,
+`jj rebase`, and other history rewrites without breaking. This is materially
+better than git-SHA-based incremental review.
+
+The `/develop` skill's Phase 4.5 uses this mode automatically when re-invoking
+`/code-review` after fixes.
 
 ## Phase 1: Gather context
 
 Before reviewing code, build understanding. This phase is **silent** — no output to user.
 
-1. **Identify the diff** — resolve `$ARGUMENTS` to a concrete set of changed files and hunks
-2. **Read project conventions** — check for `.claude/CLAUDE.md`, memory-mcp project memories
+1. **Resolve the scope.** Run `jj log -r <revset>` to confirm the revset matches what
+   the user intended. For `pr` scope, fetch the PR's commits and resolve to their
+   change IDs.
+2. **Identify changed files and hunks.** Use `jj diff -r <revset>` for the cumulative
+   diff across the scope. For per-change context, `jj diff -r <each-change>`.
+3. **Read project conventions** — check for `.claude/CLAUDE.md`, memory-mcp project memories
    (use `list` filtered by project scope, look for `project-overview`, conventions), and
-   any linter/formatter configs
-3. **Understand architecture** — for non-trivial changes, use Serena's `get_symbols_overview`
+   any linter/formatter configs.
+4. **Understand architecture** — for non-trivial changes, use Serena's `get_symbols_overview`
    on affected files to understand the surrounding code structure. Read symbol bodies only
    when needed to understand how changed code fits into the system.
-4. **Trace callers** — for any function/method whose signature, behavior, or error handling
+5. **Trace callers** — for any function/method whose signature, behavior, or error handling
    changed, use `find_referencing_symbols` to identify all call sites. This is critical for
    catching breakage that looks fine in isolation.
+6. **Load design artifacts** — check for `docs/design/` and `docs/adr/` directories. If
+   the change has associated design docs (requirements, test plans, architecture, ADRs),
+   read them. These are the contract for *what should exist* — sub-agents need them to
+   identify missing coverage, not just bugs in code that's present. Also check for linked
+   issues (`gh issue view <N>`) if the branch name or commit messages reference one.
+   Pass relevant artifacts to sub-agents as "Design context."
+
+   **Resolving design-vs-code divergence:** when a sub-agent finds that the code doesn't
+   match the design docs (or vice versa), don't mechanically pick a winner. Determine
+   what the user intended *this change* to accomplish, then judge the divergence in that
+   context:
+
+   1. **Establish the change's intent.** Read the PR description, linked issue, commit
+      messages, and any conversation context. What was the user trying to build? Is this
+      a "implement the spec" change, or a "prototype and iterate" change?
+
+   2. **Classify the divergence:**
+      - **Unimplemented requirement** — design says X should exist, code doesn't have it.
+        But is it in scope? Check whether the issue or PR description scopes this to a
+        subset of the design. Phased implementation is normal — missing requirements are
+        only findings if they're in scope for *this* change.
+      - **Contradicted requirement** — code does Y where design says X. This could be:
+        (a) a bug in the code, (b) a discovery during implementation that invalidates
+        the design, or (c) an intentional deviation the user hasn't documented yet.
+      - **Stale design** — the design describes an older architecture and hasn't been
+        updated to match intentional evolution. Common when design docs are written
+        up-front and code legitimately outgrows them.
+
+   3. **Choose severity based on confidence:**
+      - If the divergence contradicts explicit in-scope requirements and there's no
+        signal the user intended to deviate → P2 finding.
+      - If the divergence *might* be intentional (code looks deliberate, or the design
+        is old and the code is clearly more evolved) → P3, framed as "design doc may
+        be stale — verify intent."
+      - If you genuinely can't tell → surface both sides to the user without assuming
+        either is correct. Quote the specific requirement and the specific code, and
+        ask which reflects current intent.
+
+   Timestamps are a useful *signal* (check with `jj log -r 'ancestors(@)' --no-graph
+   -T 'change_id ++ " " ++ committer.timestamp().local_format("%Y-%m-%d")' <path>`)
+   but they're not authority. A design doc committed yesterday can still be aspirational
+   for a future phase. Code committed today can still be wrong.
 
 **Context budget:** aim for roughly 1:1 ratio of changed code to surrounding context.
 More context than code means you're over-reading. Less means you're likely missing impact.
 
-**Large diff warning:** research shows review effectiveness drops sharply past 400 lines
-of changed code. If the diff exceeds ~500 lines, tell the user upfront and suggest
-reviewing in logical chunks (by file group or functional area) rather than all at once.
+**Large diff warning:** review effectiveness drops sharply past 400 lines of changed
+code. If the cumulative diff exceeds ~500 lines, tell the user upfront and suggest
+either reviewing per-change (each commit in the stack reviewed independently) or
+splitting the stack. For stacks, per-change review is usually the right answer —
+that's what the stack structure is *for*.
 
 ## Phase 2: Analyze
 
@@ -78,6 +137,17 @@ gets the same diff and context but a different analytical lens. The separation e
 independent findings — a bug one agent normalizes, another catches. Use **sonnet** for
 sub-agents A and B (mechanical analysis), **opus** (4.6) for sub-agent C (judgment-heavy
 architectural review).
+
+When reviewing a multi-change scope (a stack of N commits), there are two valid approaches:
+
+- **Cumulative**: pass all sub-agents the cumulative diff. Faster, fewer tokens, but
+  loses per-change boundaries — a bug introduced in commit 1 and fixed in commit 3
+  doesn't surface as either a bug or a fix.
+- **Per-change**: dispatch one set of sub-agents per change in the stack. Slower, more
+  tokens, but each commit is reviewed as the reviewer will see it on the PR.
+
+Default to **per-change** for stacks of 2 or more, **cumulative** for single-change
+scopes. The user can override with `--cumulative` or `--per-change`.
 
 ### Sub-agent A: Correctness & Safety
 
@@ -115,6 +185,7 @@ Review the following changes for:
 For each finding, output EXACTLY this format:
 **[P1|P2|P3] <short title>**
 - File: `<path>:<line>`
+- Change: `<jj change ID where the issue lives>`
 - Issue: <1-2 sentence description of what's wrong>
 - Impact: <what breaks, and under what conditions>
 - Fix: <concrete code change or approach>
@@ -158,14 +229,33 @@ Review the following changes for:
 - For edge-case tests: is the edge case actually exercised? Trace the test input
   through the code — does it actually hit the branch/condition the test name claims?
 
+**Stack hygiene** (when reviewing per-change in a stack)
+- Does this change belong in this commit? If a fixup belongs in an earlier commit
+  in the stack, it should be squashed there before landing.
+- Are commits cohesive? Each commit should be one logical change. Mixing refactor
+  + new feature in one commit makes review harder and revert riskier.
+
 **Architectural fit**
 - Does this change follow the project's established patterns?
 - Are abstractions at the right level? (over-engineering is as bad as under-)
 - Will this change make future work harder? (coupling, hidden dependencies)
 
+**Design validation** (when design artifacts are provided)
+- Cross-reference requirements against implementation: does each requirement (R-01,
+  R-02, ...) have corresponding code? Flag requirements with no implementation.
+- Cross-reference test plan against tests: does each test case (TC-01, TC-02a, ...)
+  have a corresponding test? Flag test cases with no test, and tests that don't
+  actually verify what the test case specifies.
+- Cross-reference ADR decisions against implementation: does the code match the
+  decision? Flag divergences (may be intentional — report, don't assume).
+- Check behavioral parity requirements: if the design says "test double must behave
+  like production for X," verify the double actually enforces X (e.g., dimension
+  validation, error semantics).
+
 For each finding, output EXACTLY this format:
 **[P1|P2|P3] <short title>**
 - File: `<path>:<line>`
+- Change: `<jj change ID where the issue lives>`
 - Issue: <1-2 sentence description of what's wrong>
 - Impact: <what breaks, and under what conditions>
 - Fix: <concrete code change or approach>
@@ -201,6 +291,14 @@ Review the following changes for:
 - For each input path: trace what data can actually arrive — are all shapes covered?
 - Are error paths tested? Is the happy path the only path tested?
 
+**Design compliance** (when design artifacts are provided)
+- Verify ADR decisions are faithfully implemented — if an ADR says "use X pattern,"
+  confirm the code uses X, not a variation. Flag divergences as findings.
+- Verify requirements coverage — does each requirement have corresponding code?
+  Missing requirements are P2 findings.
+- Verify architectural diagrams match the actual module/trait/type structure.
+  Stale diagrams that don't match code are P3 findings.
+
 **Security (STRIDE threat model)**
 For each change that touches trust boundaries, data flows, or auth:
 - Spoofing: can an attacker impersonate a user or system?
@@ -221,9 +319,11 @@ Also check for concrete injection vectors:
 - Credential exposure: can secrets appear in process listings (ps), logs, stdout,
   error messages, stack traces, or debug output? Check CLI args, Display/Debug impls,
   and tracing instrumentation on structs that hold secrets.
-- Secrets in git: are tokens, keys, or credentials hardcoded or at risk of being
+- Secrets in jj/git: are tokens, keys, or credentials hardcoded or at risk of being
   committed? Check for missing .gitignore entries, secrets in config files, or test
-  fixtures containing real credentials.
+  fixtures containing real credentials. Note: jj snapshots the working copy on every
+  `jj` invocation, so a secret added to the working copy is captured as soon as any
+  `jj` command runs — `jj abandon` and rewrite ancestors if you find one.
 - Trust boundaries: where does external input enter the system? Is it validated before
   use? Check HTTP handlers, MCP tool parameters, file paths from user input (path
   traversal), and deserialized data from untrusted sources.
@@ -245,6 +345,7 @@ Also check for concrete injection vectors:
 For each finding, output EXACTLY this format:
 **[P1|P2|P3] <short title>**
 - File: `<path>:<line>`
+- Change: `<jj change ID where the issue lives>`
 - Issue: <1-2 sentence description of what's wrong>
 - Impact: <what breaks, and under what conditions>
 - Fix: <concrete code change or approach>
@@ -253,12 +354,18 @@ For each finding, output EXACTLY this format:
 ### Providing context to sub-agents
 
 Each sub-agent receives:
-1. The diff (changed lines with surrounding context)
-2. Project conventions (from Phase 1)
-3. Symbol overview of affected files
-4. Caller information for changed function signatures
-5. Contents of `code-review-patterns` memory from memory-mcp (learned patterns)
-6. **Previously dismissed findings** (for multi-round reviews only — see Phase 3)
+1. The diff (`jj diff -r <revset>` for cumulative, `jj diff -r <change>` for per-change)
+2. The change IDs in scope and their descriptions (`jj log -r <revset>`)
+3. Project conventions (from Phase 1)
+4. Symbol overview of affected files
+5. Caller information for changed function signatures
+6. Contents of `code-review-patterns` memory from memory-mcp (learned patterns)
+7. **Design artifacts** (from Phase 1, step 6) — requirements, test plan, ADRs, and
+   architecture docs when they exist. Sub-agents B and C use these to validate
+   implementation completeness: does each requirement have corresponding code? Does
+   each test case in the plan have a corresponding test? Do ADR decisions match the
+   implementation? This catches **missing coverage** that code-only review cannot.
+8. **Previously dismissed findings** (for multi-round reviews only — see Phase 3)
 
 Use Serena tools within sub-agents for any additional code exploration needed.
 
@@ -287,7 +394,8 @@ not findings that were real and fixed (those belong in the "previously fixed" co
 
 After all three sub-agents return:
 
-1. **Merge findings** — combine all three agents' results, removing duplicates
+1. **Merge findings** — combine all three agents' results, removing duplicates.
+   When per-change review was used, dedup within a change first, then across.
 2. **Verify each finding** — for every P1 and P2, read the actual code to confirm
    the issue is real. LLM reviewers hallucinate findings; do not pass through
    unverified claims. Drop any finding you cannot confirm by reading the code.
@@ -311,14 +419,17 @@ After all three sub-agents return:
 
 ## Phase 4: Report
 
-Present findings grouped by severity, then by file. Use this format:
+Present findings grouped by severity, then by change (in stack order), then by file.
+Use this format:
 
 ```
 ## Code Review: <scope description>
 
+Scope: `<revset>` (N changes, M files, K lines changed)
+
 ### P1 — Critical (N findings)
 
-**<title>** — `path/to/file.py:42`
+**<title>** — `path/to/file.py:42` (change `abcdefg`)
 <description with concrete fix>
 
 ### P2 — Important (N findings)
@@ -330,8 +441,9 @@ Present findings grouped by severity, then by file. Use this format:
 ...
 
 ### Summary
-- N files reviewed, M findings (X P1, Y P2, Z P3)
+- N changes reviewed across <revset>, M findings (X P1, Y P2, Z P3)
 - Key themes: <1-2 sentence synthesis of what the findings reveal>
+- Dismissed (false positives): <count, briefly listed>
 ```
 
 If there are zero findings at a severity level, omit that section entirely.
@@ -339,48 +451,57 @@ If there are zero findings total, say so clearly — don't invent issues to fill
 
 ## Phase 5: Post findings
 
-Findings should be captured somewhere durable, not just displayed in-session. Try each
-option in order and use the first that works:
+Findings should be captured somewhere durable, not just displayed in-session. The
+posting target depends on whether the changes are already on remote bookmarks with
+PRs open.
 
-### Option A: Post to an existing PR
+### Determine the target
 
-Check if the reviewed scope corresponds to a PR:
-- If `$ARGUMENTS` is `pr` or `pr <N>`, the PR is already known
-- If `$ARGUMENTS` is `branch`, check for an open PR on the current branch:
-  `gh pr list --head <branch> --state open --json number,url`
-- If a PR exists, post the review as a PR comment: `gh pr comment <N> --body <review>`
+For each change in scope, check whether it has a bookmark and an open PR:
 
-### Option B: Post to an existing issue
+```bash
+# For change abcdefg, find any bookmark pointing at it
+jj log -r abcdefg --no-graph -T 'bookmarks ++ "\n"'
+# For each bookmark, check for an open PR
+gh pr list --head <bookmark-name> --state open --json number,url
+```
 
-If no PR exists, check if there's a tracked issue for the work:
-- Check Serena project memories for issue references
-- Check gh-notify work items for linked issues
-- If an issue exists, post findings as a comment: `gh issue comment <N> --repo <repo> --body <review>`
+This produces one of three states per change:
+1. **Bookmark + PR exists** — post findings to that PR
+2. **Bookmark exists, no PR** — bookmark is local-only or PR was closed
+3. **No bookmark** — change hasn't been published yet
 
-### Option C: Create a PR
+### Option A: Per-change posting (when reviewing a stack with PRs)
 
-If the work is in a git repo with uncommitted or unpushed changes on a feature branch:
-1. Ensure changes are committed and pushed
-2. Create a PR: `gh pr create --title "<branch context>" --body <review>`
-3. The review becomes the PR description
+When the scope is a stack and changes have associated PRs, post each change's
+findings as a comment on its corresponding PR:
 
-Only do this when it's straightforward — the branch exists, changes are committed, and
-it's clear what the PR should be. Ask the user if anything is ambiguous.
+```bash
+gh pr comment <N> --body <findings-for-this-change>
+```
 
-### Option D: Create an issue
+Findings that span multiple changes (e.g., "the same gap appears in change 1 and 3")
+get posted to the highest-priority change's PR with a note linking to the others.
 
-If the work is in a repo but there's no PR or existing issue:
-- Create an issue with the review findings: `gh issue create --title "Code review: <scope>" --body <review>`
-- This captures findings for later action
+### Option B: Single PR posting
 
-### Option E: Display in-session only
+When the scope is a single PR or single change with one PR, post the full review
+as one comment.
 
-If none of the above apply (e.g., reviewing files outside version control, or the user
-is working interactively and will act on findings immediately), displaying the review
-in the conversation is sufficient. The findings are still valuable even without a
-durable destination.
+### Option C: Tracking issue
 
-Always tell the user where the review was posted (PR URL, issue URL, or "displayed in-session").
+If no PRs exist (work hasn't been published) but there's a tracking issue:
+```bash
+gh issue comment <N> --repo <repo> --body <review>
+```
+
+### Option D: Display in-session
+
+If none of the above apply, displaying the review in the conversation is sufficient.
+The findings are still valuable even without a durable destination.
+
+Always tell the user where the review was posted (which PR(s), issue, or "displayed
+in-session"), with a per-change breakdown when reviewing a stack.
 
 ## Phase 6: Learn (optional)
 
@@ -417,3 +538,5 @@ The skill respects project-level overrides. If a project's memory-mcp memories c
   erodes trust in the review and makes developers skim past the findings that matter.
 - **Verify before reporting** — a false positive is worse than a missed finding, because it
   erodes trust in the review process
+- **Use change IDs, not commit IDs** — change IDs are stable across rebases. Findings that
+  reference commit IDs become stale the first time you `jj squash` or `jj rebase`.
