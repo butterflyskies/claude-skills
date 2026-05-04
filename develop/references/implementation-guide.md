@@ -14,7 +14,9 @@ You are an implementation agent. You receive a plan and write the code.
   broken, unformatted, or lint-failing builds — this is the implementation agent's
   responsibility.
 - Do NOT run tests — the quality agent handles that.
-- Do NOT commit — the coordinator handles that.
+- Run `jj new -m "..."` to advance between layers and `jj describe` to set commit
+  messages. Run `jj util snapshot` after completing edits to ensure they are captured.
+  jj only snapshots when invoked — it is not a background process.
 
 ## How to work
 
@@ -43,11 +45,13 @@ review cycles — each one caused P1 or P2 findings that required fix-and-re-rev
    below it. Can any early return be reached after the acquisition fails? If so, defer
    acquisition until after the check.
 
-3. **Error path cleanup** — Stateful operations (git merge, transactions, temp files)
-   must clean up on ALL error paths, not just the happy path.
-   *Check:* for each state-entering call (e.g., `repo.merge()`), trace every `?` and
-   `return Err(...)` between it and the corresponding cleanup call. If any error path
-   skips cleanup, add a guard or an explicit cleanup-on-error block.
+3. **Error path cleanup** — Stateful operations (transactions, temp files, external
+   resources) must clean up on ALL error paths, not just the happy path.
+   *Check:* for each state-entering call, trace every `?` and `return Err(...)` between
+   it and the corresponding cleanup call. If any error path skips cleanup, add a guard
+   or an explicit cleanup-on-error block. Note: jj captures working-copy state on every
+   `jj` invocation and conflicts don't block, so you don't need to think about VCS-level
+   cleanup the way you would in git — but in-process state still needs explicit cleanup.
 
 4. **Sibling operation consistency** — When adding a guard, validation, or fix to one
    operation, all sibling operations (CRUD counterparts, parallel handlers) need the
@@ -101,7 +105,7 @@ review cycles — each one caused P1 or P2 findings that required fix-and-re-rev
     error handling, resource limits (batch sizes, connection caps), caching, implicit
     configuration (env vars, default paths), internal batching/chunking. Write a test for
     each behavior before implementing the replacement. See
-    [references/migration-checklist.md](references/migration-checklist.md) for the full checklist.
+    [migration-checklist.md](migration-checklist.md) for the full checklist.
     *Check:* for each old behavior identified, confirm there's a test that would fail if
     the new code omits it.
 
@@ -119,7 +123,9 @@ review cycles — each one caused P1 or P2 findings that required fix-and-re-rev
 You are an implementation agent. Write code to fulfill this plan.
 
 Plan:
-<plan from Phase 1>
+<plan from Phase 1, scoped to the layer you're implementing>
+
+Layer this implements: <layer N of M, intent>
 
 Language: <detected language>
 Conventions: <from references/<language>.md>
@@ -132,14 +138,37 @@ Implement the plan. For each change:
 2. Make the change
 3. Write/update tests
 
+jj workflow:
+- You are starting at change <starting-change-id>
+- For multi-layer work: run `jj new -m "Layer N: <intent>"` between layers
+- Run `jj describe -m "..."` to set/update commit messages
+- Run `jj util snapshot` after completing your edits to ensure they are captured
+- jj only snapshots when invoked — it is NOT a background process
+- Always work forward: create new changes with `jj new`, put all edits in
+  the current change. If a fix logically belongs in a prior layer, leave it
+  in the current change and report which layer it should be squashed into.
+  The coordinator handles cross-layer squashing because it has visibility
+  into workspace layout and review state that you lack
+- Use change IDs (alphabetic), not commit IDs (hex) — change IDs are stable
+  across rebases
+
 Report:
 - Files modified and what changed
 - Tests added or updated
 - Any divergence from the plan and why
+- The change IDs of each layer you created
 ```
 
-## Git workflow
+## jj workflow
 
-- All work happens on feature branches — never commit to main
-- Branch naming: `feature/<short-description>` or `fix/<short-description>`
-- If no feature branch exists yet, create one before making changes
+- Each layer is its own jj change. The sub-agent runs `jj new -m "..."` to
+  advance between layers.
+- jj only snapshots the working copy when a jj command is invoked — it is NOT
+  a background watcher. Run `jj util snapshot` to force a snapshot if needed.
+- Always work forward: put all edits in the current or a new change. If a fix
+  belongs in a prior layer, leave it in the current change and report which
+  layer it targets. The coordinator uses `jj squash --from --into` to fold it
+  back — it has the full picture of workspace layout and review state.
+- All work happens in a stack rooted at `bookmark_base()` (the last published bookmark
+  in the ancestry of the working copy). The coordinator ensures the working position
+  is correct before dispatching you.

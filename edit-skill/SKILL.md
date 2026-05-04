@@ -1,14 +1,19 @@
 ---
 name: edit-skill
-description: "Edit and publish skill changes. Takes a description of what to change as arguments, makes the edits, then handles the git workflow (branch, commit, push, PR). Use when you need to modify an existing skill or create a new one."
+description: "Edit and publish skill changes. Takes a description of what to change as arguments, makes the edits, then handles the jj/PR workflow. Use when you need to modify an existing skill or create a new one."
 ---
 
 # /edit-skill — Edit and Publish Skills
 
-Modify skills based on a description, then handle the git workflow to land the changes.
+Modify skills based on a description, then handle the jj workflow to land the changes.
+
+This skill is jj-native. Each logical group of skill changes becomes its own jj change
+with its own `pr/<slug>` bookmark, landing as its own PR. See
+[references/stacking-conventions.md](../references/stacking-conventions.md) for the
+bookmark and PR mechanics.
 
 Use memory-mcp's `read` tool to load the `required-environment-variables` memory (scope: global)
-if you haven't already this session, and use those identities for all git/gh operations throughout.
+if you haven't already this session, and use those identities for all jj/git/gh operations throughout.
 
 ## Argument handling
 
@@ -24,8 +29,9 @@ publish those (legacy publish-only mode).
 ## Prerequisites
 
 This skill operates on the skills repo at `~/.claude/skills`. It assumes:
-- The repo is initialized and has `origin` pointing to GitHub
-- Branch protection on `main` requires PRs (no direct push)
+- The repo is a colocated jj repo (`jj git init --colocate` was run, or it was cloned
+  with `jj git clone`)
+- Branch protection on `main` requires PRs
 
 ## Phase 1: Understand and plan
 
@@ -33,6 +39,16 @@ This skill operates on the skills repo at `~/.claude/skills`. It assumes:
 2. Read the target skill's SKILL.md and any relevant references
 3. If creating a new skill, identify the right directory and structure
 4. Summarize what you'll change before making edits
+
+Before making changes, check the working position:
+
+```bash
+jj log -r 'stack()'
+```
+
+If `stack()` is non-empty, ask whether the new edits build on the existing stack
+or should be a fresh stack. If fresh, run `jj new bookmark_base()` to start from
+the last published bookmark.
 
 ## Phase 2: Make the edits
 
@@ -42,12 +58,18 @@ This skill operates on the skills repo at `~/.claude/skills`. It assumes:
 4. For reference files: update or create as needed
 5. Review your edits — read the modified files back to verify correctness
 
+jj snapshots the working copy when any `jj` command runs — no `git add` needed.
+Run `jj util snapshot` to force a snapshot if needed. The current change
+accumulates your edits.
+
 ## Phase 3: Detect and analyze all changes
 
-1. `git status` in `~/.claude/skills`
-2. If the working tree is clean — report "Nothing to publish" and stop
-3. `git diff` to review all changes (staged and unstaged)
-4. If currently on a feature branch with unpushed commits, include those too
+1. `jj st` in `~/.claude/skills`
+2. If the working tree is clean and `stack()` is empty — report "Nothing to publish"
+   and stop
+3. `jj diff -r 'stack()'` to review all changes across the current stack
+4. If the stack has multiple layers already (from earlier edits this session), each
+   one is its own group
 
 Review every changed file and understand what each edit does.
 
@@ -56,79 +78,89 @@ Review every changed file and understand what each edit does.
 Analyze the changes and decide how to split them:
 
 - **One logical change** (e.g. a single skill edited, or tightly related edits across files):
-  one branch, one commit, one PR.
+  one change in the stack, one bookmark, one PR.
 - **Multiple independent changes** (e.g. edits to unrelated skills, a new skill plus a
-  separate fix to an existing one): separate branches, separate commits, separate PRs.
+  separate fix to an existing one): separate changes in the stack (one per group),
+  one bookmark per change, one PR per change.
 
 Guiding principles:
 - Each PR should be reviewable on its own — a coherent, self-contained change
 - Edits to the same skill that serve the same purpose belong together
-- A new skill is its own PR unless it was created alongside tightly coupled edits to
+- A new skill is its own group unless it was created alongside tightly coupled edits to
   an existing skill
 - When in doubt, split — smaller PRs are easier to review and merge
+
+If the working copy currently mixes multiple groups, split them with `jj split`:
+
+```bash
+jj split  # interactive: select files for the first group
+# repeat for subsequent groups; jj creates a chain of changes
+```
+
+If the groups are already separate (e.g., you edited skill A, ran `jj new`, edited
+skill B), the stack is already in the right shape — just verify with `jj log -r 'stack()'`.
 
 Summarize the grouping before proceeding (e.g. "I see two independent changes: X and Y.
 I'll create separate PRs for each.").
 
-## Phase 5: For each logical group, branch → commit → push → PR
+## Phase 5: Describe each change
 
-Process each group sequentially. For each one:
+For each change in the stack, ensure it has a meaningful description. Run
+`jj log -r 'stack()'` to see current descriptions; for any change with a
+placeholder or empty description:
 
-### 5a. Ensure on the right branch
-- Start from `main` (pull latest first)
-- Create a new branch named after the change (e.g. `skill/develop-add-phase`,
-  `skill/edit-skill-rename`). Use `skill/` prefix.
-- If already on a `skill/*` branch that matches this group: stay on it
+```bash
+jj describe -r <change-id> -m "<descriptive message>"
+```
 
-### 5b. Commit
-- Stage only the files belonging to this logical group
-- Write a descriptive commit message summarizing the change
-- Multiple commits within a group are fine if they represent distinct steps
+Use the same conventions as repo commit messages — short subject line, optional
+body explaining why.
 
-### 5c. Push
-- Push to origin with `-u`
+## Phase 6: Land the stack
 
-### 5d. Open or update PR
-- If no PR exists for this branch: create one via `gh pr create`
-  - Title: concise description of the skill change
-  - Body: summary of what changed and why, with the standard footer
-- If a PR already exists: update the description if new commits were added,
-  or just report the PR URL
+Invoke `/develop land` to handle bookmarks, push, and PR creation:
 
-### 5e. Return to main
-- `git checkout main` before starting the next group
+```
+/develop land
+```
 
-## Phase 6: Wait for merge
+This sets `pr/<slug>` bookmarks on each change in the stack, pushes them, opens
+PRs with correct bases, and generates stack metadata in PR bodies. The slugs come
+from the change descriptions — `/develop land` will ask you to confirm or override.
+
+For skill PRs specifically, suggest slugs of the form `pr/skill-<name>-<intent>`
+(e.g., `pr/skill-develop-add-jj-stacking`, `pr/skill-edit-skill-stack-mode`).
+
+## Phase 7: Wait for merge
 
 After all PRs are created, report the PR URLs and **wait for the user** to confirm
-each PR is merged. Do not switch back to main or pull until the user says the PR(s)
-are merged.
+each PR is merged. Do not run further jj commands or fetch until the user says
+the PR(s) are merged.
 
-## Phase 7: Return to main
+When the user reports a merge:
 
-Once the user confirms the PR(s) are merged:
-1. `git checkout main && git pull`
-2. Confirm the working tree is clean and up to date
+```bash
+jj git fetch
+jj abandon <change-id-of-merged-layer>  # optional cleanup
+```
+
+If the merged layer was the bottom of a stack, the next layer's `bookmark_base()`
+now resolves to `main`. The stack continues from there.
 
 ## Output format
 
-After creating PRs:
+After invoking `/develop land`:
 ```
 ## Skill changes published
 
-### PR 1: <title>
-**Branch**: skill/<name>
-**PR**: <url>
-**Changes**:
-- <bullet summary>
+### Stack
+- pr/skill-<slug-1>: <title>  →  PR #<num>
+- pr/skill-<slug-2>: <title>  →  PR #<num>
 
-### PR 2: <title>  (if applicable)
-...
-
-Let me know when merged and I'll switch back to main.
+Let me know when merged and I'll fetch and clean up.
 ```
 
 After user confirms merge:
 ```
-Switched to main, up to date.
+Fetched main. Stack updated. <N> layers landed; <M> remaining.
 ```
