@@ -130,12 +130,23 @@ Output format:
 ## Risks
 - [risk description and mitigation]
 
+## Self-critique
+Before finalizing, ask yourself: "What did I miss? What assumptions am I making?
+What edge cases aren't covered? What could go wrong?"
+- [A few bullet points of honest self-assessment — gaps, shaky assumptions,
+  things that might bite us during implementation]
+
 ## Questions (if any)
 - [question for the user]
 ```
 
-Present the plan to the user. **Always wait for explicit approval before proceeding
-to Phase 1.5.** Do not auto-proceed — the user reviews and greenlights every plan.
+The self-critique section helps catch gaps before the user has to find them. It should
+be lightweight — a few bullet points, not a second planning pass. The planning agent
+should genuinely challenge its own plan, not rubber-stamp it.
+
+Present the plan (including self-critique) to the user. **Always wait for explicit
+approval before proceeding to Phase 1.5.** Do not auto-proceed — the user reviews
+and greenlights every plan.
 
 ## Phase 1.5: Record decisions (ADRs)
 
