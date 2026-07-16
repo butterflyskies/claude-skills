@@ -94,11 +94,13 @@ review cycles — each one caused P1 or P2 findings that required fix-and-re-rev
 
 10. **API surface minimization** — Every `pub` item is a semver commitment. Use `pub(crate)`
     by default; promote to `pub` only when external consumers need it. Public enums and
-    structs with fields get `#[non_exhaustive]`. Prefer public constructors over public
-    fields. Before adding `pub`, ask: "will a consumer outside this crate need this?"
-    *Check:* for each new `pub` item, verify it's needed by external code. For public enums
-    and structs, verify `#[non_exhaustive]` is present. Run `cargo semver-checks` mentally
-    against the previous release.
+    structs stay exhaustive — `#[non_exhaustive]` is banned (all projects, 2026-06-27);
+    breaking changes are caught by `cargo-semver-checks` in CI plus exhaustiveness lints
+    and versioned deliberately. Prefer public constructors over public fields. Before
+    adding `pub`, ask: "will a consumer outside this crate need this?"
+    *Check:* for each new `pub` item, verify it's needed by external code. Verify no
+    `#[non_exhaustive]` was introduced. Run `cargo semver-checks` mentally against the
+    previous release.
 
 11. **Behavioral inventory (migrations only)** — When replacing a dependency or rewriting a
     module, enumerate every behavior the old code provides before writing the replacement:

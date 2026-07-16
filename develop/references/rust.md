@@ -26,9 +26,11 @@ memory-mcp memory (scope: global) + user workflow preferences.
 12. Vacuous test assertions — a test should fail if its assertion is removed. Tests that
     compare single-element collections, assert `true`, or duplicate internal logic instead
     of using the library's public API prove nothing.
-13. Missing `#[non_exhaustive]` on public enums and structs with fields — this is required
-    for semver safety. Adding a variant or field to a non-exhaustive type is not a breaking
-    change; adding it to a bare `pub enum` is.
+13. `#[non_exhaustive]` on public enums or structs — banned across all projects
+    (2026-06-27; originally helene ADR-004, upgraded to universal). Public enums are
+    exhaustive by default. Adding a variant is an honest breaking change: caught by
+    `cargo-semver-checks` in CI and exhaustiveness lints, versioned deliberately —
+    not hedged with the attribute.
 
 ## Positive patterns
 
